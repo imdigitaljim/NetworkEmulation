@@ -2,6 +2,7 @@
 #define _BRIDGE_H
 
 #include "connection.h"
+#include <fstream>
 
 class Bridge : public Connection
 {

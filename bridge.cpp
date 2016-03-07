@@ -1,6 +1,7 @@
 #include "bridge.h"
 
-Bridge::Bridge(string name, size_t ports) : num_ports(ports), lan_name(name)
+
+Bridge::Bridge(string name, size_t ports) : num_ports(ports)
 {
 	int optval = true;
 	char hostname[HOST_NAME_MAX];
