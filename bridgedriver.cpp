@@ -21,8 +21,7 @@ int main(int argc, char** argv)
 		cerr << "usage: " << argv[0] << " <lan-name> <max-port>" << endl;
 		exit(1);
 	}
-	/* create the symbolic links to its address and port number
-	* so that others (stations/routers) can connect to it */
+
 	string name_str(argv[1]);
 	size_t port_count = GetPorts(string(argv[2]));
 	if (!IsValidName(name_str))

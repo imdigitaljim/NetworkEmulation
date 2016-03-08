@@ -1,3 +1,9 @@
+/*
+Course: CNT5505 - Data Networks and Communications
+Semester: Spring 2016
+Name: James Bach, Becky Powell
+*/
+
 #ifndef _BRIDGE_H
 #define _BRIDGE_H
 
@@ -12,17 +18,19 @@ class Bridge : public Connection
 		~Bridge();
 		
 		void ioListen();
-		string GetName() const;
-		size_t GetPortCount() const;
+		
 	private:
 		void checkExitServer();
 		void checkNewConnections();
 		void checkNewMessages();
 		bool msgIsValid();
+		void GenerateInfoFiles();
 		
+		
+		string pFile, aFile; //port and address files
 		list<int> conn_list;
 		int open_port;
-		size_t num_ports;
+		size_t max_ports;
 		string lan_name;
 		
 };

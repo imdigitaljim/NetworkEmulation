@@ -1,9 +1,8 @@
 /*
 Course: CNT5505 - Data Networks and Communications
 Semester: Spring 2016
-Name: James Bach
+Name: James Bach, Becky Powell
 */
-
 
 #include "connection.h"
 

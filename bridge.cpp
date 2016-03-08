@@ -1,37 +1,59 @@
+/*
+Course: CNT5505 - Data Networks and Communications
+Semester: Spring 2016
+Name: James Bach, Becky Powell
+*/
+
 #include "bridge.h"
 
 
-Bridge::Bridge(string name, size_t ports) : num_ports(ports)
-{
+Bridge::Bridge(string name, size_t ports) : max_ports(ports), lan_name(name)
+{	
 	int optval = true;
 	char hostname[HOST_NAME_MAX];
+	char str[INET6_ADDRSTRLEN];
 	sockaddr_in serv_addr = getSockAddrInfo(htons(0));
-	addrinfo hints = getHints(AI_CANONNAME | AI_PASSIVE), *serv_info;
+	addrinfo hints = getHints(AI_CANONNAME | AI_PASSIVE), *serv_info, *p;
 	socklen_t salen = sizeof(serv_addr);
 	memset(hostname, 0, HOST_NAME_MAX);
-	main_socket = socket(AF_INET, SOCK_STREAM, 0);
-	if (setsockopt(main_socket, SOL_SOCKET,	SO_REUSEADDR, &optval, sizeof(optval)) == FAILURE)
-	{
-		cerr << "Socket options failed." << endl;
-		exit(1);
-	}
-	if (bind(main_socket, (sockaddr *) &serv_addr, sizeof(serv_addr)) == FAILURE)
-	{
-		cerr << "Bind failed." << endl;
-		exit(1);
-	}
-	if (listen(main_socket, BACKLOG) == FAILURE)
-	{
-		cerr << "Listen failed." << endl;
-		exit(1);
-	}
+	
 	if (gethostname(hostname, HOST_NAME_MAX) == FAILURE)
 	{
 		cerr << "Failed to get hostname" << endl;
 		exit(1);
-	}	
+	}
 	if (getaddrinfo(hostname, NULL, &hints, &serv_info) == FAILURE) {
 		cerr << "Failed to get address info" << endl;
+		exit(1);
+	}
+	for (p = serv_info; p != NULL; p = p->ai_next)
+	{
+		if ((main_socket = socket(AF_INET, SOCK_STREAM, 0)) == FAILURE)
+		{
+			continue;
+		}
+		if (setsockopt(main_socket, SOL_SOCKET,	SO_REUSEADDR, &optval, sizeof(int)) == FAILURE)
+		{
+			cerr << "Socket options failed." << endl;
+			exit(1);
+		}
+		if (bind(main_socket, p->ai_addr, p->ai_addrlen) == FAILURE)
+		{
+			continue;
+		}
+		break;
+	}
+	sockaddr_in *ipv4 = (sockaddr_in*)p->ai_addr;
+	inet_ntop(p->ai_family, &ipv4->sin_addr, str, sizeof(str));
+	if (p == NULL)
+	{
+		cerr << "Failed to bind." << endl;
+		exit(1);
+	}
+	freeaddrinfo(serv_info);
+	if (listen(main_socket, BACKLOG) == FAILURE)
+	{
+		cerr << "Listen failed." << endl;
 		exit(1);
 	}
 	if (getsockname(main_socket, (sockaddr *)&serv_addr, &salen) == FAILURE)
@@ -40,9 +62,23 @@ Bridge::Bridge(string name, size_t ports) : num_ports(ports)
 		exit(1);
 	}
 	open_port = ntohs(serv_addr.sin_port);
-	cout << "admin: started server on '" << serv_info->ai_canonname;
-	cout << "' at '" << open_port << "'" << endl;
-	freeaddrinfo(serv_info);
+	lan_name = string(str);
+	GenerateInfoFiles();
+}
+
+void Bridge::GenerateInfoFiles()
+{
+	cout << "creating file " << open_port << endl;
+	cout << "creating file " << lan_name << endl;
+	/* create the symbolic links to its address and port number
+	* so that others (stations/routers) can connect to it */
+	/*
+	string file_prefix = "." + lan_name + ".";
+	pFile = file_prefix + "port";
+	aFile = file_prefix + "addr";
+	symlink(to_string(open_port).c_str(), pFile.c_str());
+	symlink("0.0.0.0", aFile.c_str());
+	*/
 }
 
 void Bridge::checkExitServer()
@@ -174,21 +210,9 @@ void Bridge::ioListen()
 	checkNewMessages();
 }
 
-
-
-string Bridge::GetName() const
-{
-	return lan_name;
-}
-
-size_t Bridge::GetPortCount() const
-{
-	return num_ports;
-}
-
-
 Bridge::~Bridge()
 {
+	/* add file removal for cwd of .lan-name.addr/port*/
 	for (auto it = conn_list.begin(); it != conn_list.end(); it++)
 	{
 		close(*it);

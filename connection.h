@@ -1,7 +1,7 @@
 /*
 Course: CNT5505 - Data Networks and Communications
 Semester: Spring 2016
-Name: James Bach
+Name: James Bach, Becky Powell
 */
 #ifndef _SOCKCONN_H
 #define _SOCKCONN_H
@@ -42,8 +42,11 @@ class Connection
 		sockaddr_in getSockAddrInfo(int port);
 		void getMessageBuffer(int sock, int bytes);
 		virtual void ioListen() = 0;
+		
 		int main_socket;
 		fd_set readset;
+		
+		
 		char buffer[MSGMAX + 1], *msg;				
 };
 
