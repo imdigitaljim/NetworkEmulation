@@ -9,14 +9,23 @@ Name: James Bach, Becky Powell
 
 #include "connection.h"
 #include <fstream>
+#include <unordered_map>
+#define TTLMAX 360
+
+class ConnectionEntry
+{	
+	public:
+		ConnectionEntry(int = 0);
+		int port;
+		double TTL; 
+};
 
 class Bridge : public Connection
 {
 	
 	public:	
 		Bridge(string name, size_t ports);
-		~Bridge();
-		
+		~Bridge(); 
 		void ioListen();
 		
 	private:
@@ -25,14 +34,16 @@ class Bridge : public Connection
 		void checkNewMessages();
 		bool msgIsValid();
 		void GenerateInfoFiles();
-		
+		void readMessage(int sock, int bytes); //de-layer the message
 		
 		string pFile, aFile; //port and address files
 		list<int> conn_list;
 		int open_port;
 		size_t max_ports;
+		size_t current_ports;
 		string lan_name;
 		
+		unordered_map<string, ConnectionEntry> connections;
 };
 
 #endif

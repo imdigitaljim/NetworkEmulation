@@ -10,8 +10,8 @@ Name: James Bach, Becky Powell
 
 using namespace std;
 
-size_t GetPorts(string port);
-bool IsValidName(string name);
+size_t getPorts(string port);
+bool isValidName(string name);
 
 /* bridge : recvs pkts and relays them*/
 int main(int argc, char** argv)
@@ -23,8 +23,8 @@ int main(int argc, char** argv)
 	}
 
 	string name_str(argv[1]);
-	size_t port_count = GetPorts(string(argv[2]));
-	if (!IsValidName(name_str))
+	size_t port_count = getPorts(string(argv[2]));
+	if (!isValidName(name_str))
 	{
 		cerr << name_str << ": already exists!" << endl;
 		exit(1);
@@ -40,7 +40,7 @@ int main(int argc, char** argv)
 	}
 	return 0;
 }
-size_t GetPorts(string port)
+size_t getPorts(string port)
 {
 	size_t num;
 	try
@@ -59,7 +59,7 @@ size_t GetPorts(string port)
 	return num;
 }
 
-bool IsValidName(string name)
+bool isValidName(string name)
 {
 	string info_file = "." + name + ".";
 	DIR *d;

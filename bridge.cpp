@@ -7,8 +7,10 @@ Name: James Bach, Becky Powell
 #include "bridge.h"
 
 
-Bridge::Bridge(string name, size_t ports) : max_ports(ports), lan_name(name)
+Bridge::Bridge(string name, size_t ports) : current_ports(0) //TODO: start db cleanup thread
 {	
+	max_ports = ports;
+	lan_name = name;
 	int optval = true;
 	char hostname[HOST_NAME_MAX];
 	char str[INET6_ADDRSTRLEN];
@@ -70,8 +72,6 @@ void Bridge::GenerateInfoFiles()
 {
 	cout << "creating file " << open_port << endl;
 	cout << "creating file " << lan_name << endl;
-	/* create the symbolic links to its address and port number
-	* so that others (stations/routers) can connect to it */
 	/*
 	string file_prefix = "." + lan_name + ".";
 	pFile = file_prefix + "port";
@@ -131,14 +131,23 @@ void Bridge::checkNewConnections()
 			cerr << "Failed to get address info " << endl;
 			exit(1);
 		}
-		conn_list.push_back(cd);
-		cout << "admin: connect from '" + string(serv_info->ai_canonname) + "' at '" + to_string(ntohs(client_addr.sin_port)) + "'" << endl;	
-		string admin_msg = "admin: connected to server on '" + string(serv_info->ai_canonname) + "' at '" + to_string(open_port) + "' thru '" + to_string(ntohs(client_addr.sin_port)) + "'";
-		string send_msg = ultostr(admin_msg.length()) + admin_msg;
-		for (auto it = conn_list.begin(); it != conn_list.end(); it++)
+		if (current_ports < max_ports)
 		{
-			write(*it, send_msg.c_str(), send_msg.length());			
+			current_ports++;
+			conn_list.push_back(cd);
+			cout << "connect from '" + string(serv_info->ai_canonname) + "' at '" + to_string(ntohs(client_addr.sin_port)) + "'" << endl;	
+			//string admin_msg = "admin: connected to server on '" + string(serv_info->ai_canonname) + "' at '" + to_string(open_port) + "' thru '" + to_string(ntohs(client_addr.sin_port)) + "'";
+			string response("accept");
+			string send_msg = ultostr(response.length()) + response;
 		}
+		else
+		{
+			string response("reject");
+			string send_msg = ultostr(response.length()) + response;
+			write(cd, send_msg.c_str(), send_msg.length());		
+			close(cd);
+		}
+	
 		freeaddrinfo(serv_info);
 	}
 }
@@ -156,39 +165,67 @@ void Bridge::checkNewMessages()
 			if ((bytes_read = read(*it, buffer, MSGMAX)) == 0)
 			{
 				//disconnect
+				current_ports--;
 				getpeername(*it, (sockaddr*)&client_addr, &calen);
 				string admin_msg = "admin: (" + to_string(ntohs(client_addr.sin_port)) + ")" + string(inet_ntoa(client_addr.sin_addr)) + " has disconnected. ";
 				cout << admin_msg  << endl;
 				close(*it);
 				it = conn_list.erase(it);
+
+				/*
 				string send_msg = ultostr(admin_msg.length()) + admin_msg;
 				for (auto it2 = conn_list.begin(); it2 != conn_list.end(); it2++)
 				{
 					write(*it2, send_msg.c_str(), send_msg.length());	
-				}					
+				}
+				*/
+				
 			}
 			else
 			{
-				getpeername(*it, (sockaddr*)&client_addr, &calen);			
-				getMessageBuffer(*it, bytes_read);	
-				if (msgIsValid())
+				getpeername(*it, (sockaddr*)&client_addr, &calen);
+				readMessage(*it, bytes_read);	
+				if (msgIsValid()) //not random empty data message?
 				{
-					string peer_msg = "(" + to_string(ntohs(client_addr.sin_port)) + ") " + string(inet_ntoa(client_addr.sin_addr)) + ": " + string(msg);
-					cout << peer_msg << endl;
-					string send_msg = ultostr(peer_msg.length()) + peer_msg;
-					for (auto it2 = conn_list.begin(); it2 != conn_list.end(); it2++)
+					string src_macaddress; //TODO: extract MAC_ADDRESS from message
+					connections[src_macaddress] = ConnectionEntry(*it); //adds AND refreshes entry					
+					string dest_macaddress; //TODO: extract MAC_ADDRESS from message
+					if (connections.count(dest_macaddress) > 0) // it knows the destination
 					{
-						if (*it != *it2)
+						string response = ""; //TODO: send response / rebuild message
+						string send_msg = ultostr(response.length()) + response;
+						write(connections[dest_macaddress].port, send_msg.c_str(), send_msg.length());	
+					}
+					else //broadcast message
+					{
+						string response = ""; //TODO: send response / rebuild message
+						string send_msg = ultostr(response.length()) + response;
+						for (auto it2 = conn_list.begin(); it2 != conn_list.end(); it2++)
 						{
-							write(*it2, send_msg.c_str(), send_msg.length());	
+							if (*it != *it2)
+							{
+								write(*it2, send_msg.c_str(), send_msg.length());	
+							}
 						}
 					}
+					//string peer_msg = "(" + to_string(ntohs(client_addr.sin_port)) + ") " + string(inet_ntoa(client_addr.sin_addr)) + ": " + string(msg);
+					//cout << peer_msg << endl;	
 				}
 				
 				delete msg;
 			}
 		}
 	}
+}
+
+void Bridge::readMessage(int sock, int bytes)
+{
+	buffer[MSGMAX] = 0;			
+	unsigned long len = strtoul(buffer, NULL, 10);
+	msg = new char[len + 1];
+	memset(msg, 0, len + 1);
+	read(sock, msg, len);
+	msg[len] = 0;
 }
 
 bool Bridge::msgIsValid()
@@ -218,4 +255,9 @@ Bridge::~Bridge()
 		close(*it);
 	}
 	close(main_socket);
+}
+
+ConnectionEntry::ConnectionEntry(int p) : TTL(TTLMAX)
+{
+	port = p;
 }

@@ -38,6 +38,7 @@ void Connection::getMessageBuffer(int sock, int bytes)
 	msg = new char[len + 1];
 	memset(msg, 0, len + 1);
 	read(sock, msg, len);
+	//EXTRACT OTHER INFO
 	msg[len] = 0;
 }
 
