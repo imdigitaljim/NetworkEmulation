@@ -32,6 +32,8 @@ Name: James Bach, Becky Powell
 #include <thread>
 #include <vector>
 #include <utility>
+#include <iomanip>
+
 
 #define KEYBOARD 0
 #define FAILURE -1
@@ -41,6 +43,15 @@ Name: James Bach, Becky Powell
 #define addrinfo struct addrinfo
 #define sockaddr struct sockaddr
 #define in_addr struct in_addr
+#define INET_MACSTRLEN 18
+
+
+#define DEBUG true
+#if DEBUG
+#define DBGOUT(x) std::cout << x << std::endl
+#else
+#define DBGOUT(x)
+#endif
 
 using namespace std;
 
@@ -69,7 +80,6 @@ class Host
 	public:
 		Host(string n, string ip)
 		{
-			cout << "ADDING HOST: " << n << " " << ip << endl;
 			name = n;
 			inet_pton(AF_INET, ip.c_str(), &addr);
 		}
@@ -83,7 +93,6 @@ class Route
 	public:
 		Route(string dest, string hop, string mk, string name)
 		{
-			cout << "ADDING ROUTE: " << dest << " " << hop << " " << mk << " " << name << endl;	
 			inet_pton(AF_INET, dest.c_str(), &destsubnet);
 			inet_pton(AF_INET, hop.c_str(), &nexthop);
 			inet_pton(AF_INET, mk.c_str(), &mask);
@@ -102,7 +111,6 @@ class Interface
 	public:
 		Interface(string name, string ip, string mk, string mac, string lan)
 		{
-			cout << "ADDING INTERFACE: " << name << " " << mk << " " << ip << " " << mac << " " << lan << endl;
 			ifacename = name;
 			inet_pton(AF_INET, ip.c_str(), &ipaddr);
 			inet_pton(AF_INET, mk.c_str(), &mask);

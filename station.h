@@ -9,10 +9,11 @@ Name: James Bach, Becky Powell
 
 #define MAXHOSTS 32
 #define MAXINTER 32
-#define PORTMAX
+#define PORTMAX 10
 #define CONNECTIONRESPONSE 7
 #define TIMEOUT 2
 #define MAXFAIL 5
+
 
 #include "connection.h"
 
@@ -26,13 +27,13 @@ class Station : public Connection
 		
 		void ioListen();
 		void connectbridges();
+		void printTables() const;
 	private:
 		void populateHosts(string hostfile);
 		void populateRouting(string rtable);
 		void populateInterfaces(string iface);
 		pair<string,string> readLinks(int index) const;
-		bool timeout(int& count) const;
-		
+		bool isConnectionAccepted();
 		string server_ip;
 		vector<Host> host_list;
 		vector<Route> routing_table;
