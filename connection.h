@@ -7,7 +7,11 @@ Name: James Bach, Becky Powell
 #define _SOCKCONN_H
 #include <sys/types.h>
 #include <netinet/in.h>
+#include <sys/time.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
 #include <sys/socket.h>
+#include <malloc.h>
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
@@ -16,12 +20,19 @@ Name: James Bach, Becky Powell
 #include <fcntl.h>
 #include <cstring>
 #include <string>
+#include <signal.h>
 #include <unistd.h>
 #include <iomanip>
 #include <sstream>
 #include <limits.h>
 #include <list>
+#include <errno.h>
 #include <fstream>
+#include <chrono>
+#include <thread>
+#include <vector>
+#include <utility>
+
 #define KEYBOARD 0
 #define FAILURE -1
 #define BACKLOG 5

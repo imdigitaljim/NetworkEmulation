@@ -13,11 +13,9 @@ Name: James Bach, Becky Powell
 #define CONNECTIONRESPONSE 7
 #define TIMEOUT 2
 #define MAXFAIL 5
-#include <chrono>
-#include <thread>
+
 #include "connection.h"
-#include <vector>
-#include <utility>
+
 
 class Station : public Connection
 {
@@ -55,11 +53,6 @@ class Station : public Connection
 #define PROT_TYPE_UDP 0
 #define PROT_TYPE_TCP 1
 #define PROT_TYPE_OSPF 2
-
-
-
-
-
 
 
 /* ETHER.H */

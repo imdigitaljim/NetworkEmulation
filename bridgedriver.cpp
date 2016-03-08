@@ -5,8 +5,6 @@ Name: James Bach, Becky Powell
 */
 
 #include "bridge.h"
-#include <dirent.h>
-#define Directory struct dirent 
 
 using namespace std;
 
@@ -61,41 +59,11 @@ size_t getPorts(string port)
 
 bool isValidName(string name)
 {
-	string info_file = "." + name + ".";
-	DIR *d;
-	Directory *dir;
-	d = opendir(".");
-	if (d)
-	{
-		while((dir = readdir(d)) != NULL)
-		{
-			string cwdfile(dir->d_name);		
-			if (cwdfile.length() > info_file.length())
-			{
-				if (cwdfile.substr(0, info_file.length()) == info_file)
-				{
-					return false;
-				}		
-			}
-		}	
-	}
-	return true;
+	char buff[true];
+	string aFile = "." + name + ".addr";
+	string pFile = "." + name + ".port";
+	return (readlink(aFile.c_str(), buff, true) == FAILURE) 
+		&& (readlink(pFile.c_str(), buff, true) == FAILURE);
 }
 
 
-/*
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/time.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <malloc.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <signal.h>
-#include <sys/wait.h>
-#include <errno.h>
-#include <string.h>
-#include <netdb.h>
-#include <arpa/inet.h>
-*/

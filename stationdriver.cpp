@@ -6,6 +6,7 @@ Name: James Bach, Becky Powell
 
 #include "station.h"
 #define REQARGS 5
+
 using namespace std;
 
 bool isRouter(char* flag);
@@ -56,21 +57,3 @@ bool isValidFile(char* filename)
 	fs.close();
 	return result;
 }
-
-/*
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/time.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <arpa/inet.h>
-#include <signal.h>
-#include <sys/wait.h>
-#include <errno.h>
-#include <string.h>
-#include <strings.h>
-#include <stdlib.h>
-*/
