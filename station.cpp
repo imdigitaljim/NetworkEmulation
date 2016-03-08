@@ -6,107 +6,59 @@ Name: James Bach, Becky Powell
 
 #include "station.h"
 
-void Station::populateHosts(string hostfile)
-{
-	fstream fs(hostfile.c_str());
-	string name, ip;
-	while (!fs.eof())
-	{
-		fs >> name;
-		fs >> ip;
-		host_list.push_back(Host(name, ip));
-	}
-	fs.close();
-}
-void Station::populateRouting(string rtablefile)
-{
-	fstream fs(rtablefile.c_str());
-	string dest, hop, mask, iface;
-	while (!fs.eof())
-	{
-		fs >> dest;
-		fs >> hop;
-		fs >> mask;
-		fs >> iface;
-		routing_table.push_back(Route(dest, hop, mask, iface));
-	}
-	fs.close();
-}
-void Station::populateInterfaces(string ifacefile)
-{
-	fstream fs(ifacefile.c_str());
-	string iface, ip, mk, mac, lan;
-	while (!fs.eof())
-	{
-		fs >> iface;
-		fs >> ip;
-		fs >> mk;
-		fs >> mac;
-		fs >> lan;
-		iface_list.push_back(Interface(iface, ip, mk, mac, lan));
-	}
-	fs.close();
-	
-}
 Station::Station(bool isRouter, string ifacefile, string rtablefile, string hostfile)
 {
 	populateInterfaces(ifacefile);
 	populateRouting(rtablefile);
 	populateHosts(hostfile);
-	return;
-	
-	const char* host = "aksudhaskdu";
-	const char* port = "12355";
-	addrinfo *server_info;
-	sockaddr_in sa = getSockAddrInfo(htons(atoi(port))), *h;
-	if (inet_aton(host, (in_addr *) &sa.sin_addr.s_addr))
-	{
-		if ((main_socket = socket(AF_INET, SOCK_STREAM, 0)) == FAILURE)
-		{
-			cerr << "Failed to create socket" << endl;
-			exit(1);
-		}
-		if (connect(main_socket, (sockaddr *) &sa, sizeof(sa)) == FAILURE)
-		{
-			cerr << "Failed to Connect!" << endl;
-			exit(1);
-		}
-	}
-	else
-	{
-		addrinfo hints = getHints(AI_PASSIVE);
-		if (getaddrinfo(host, "http", &hints, &server_info) == FAILURE)
-		{
-			cerr << host << ": failed to resolve" << endl;
-			exit(1);
-		}	
-		addrinfo *ai_ptr;
-		for(ai_ptr = server_info; ai_ptr != NULL; ai_ptr = ai_ptr->ai_next) 
-		{
-			h = (sockaddr_in *) ai_ptr->ai_addr;
-			server_ip = inet_ntoa(h->sin_addr);	
-			if (inet_aton(server_ip.c_str(), (in_addr *) &sa.sin_addr.s_addr))
-			{
-				if ((main_socket = socket(AF_INET, SOCK_STREAM, 0)) == FAILURE)
-				{
-					continue;
-				}
+	connectbridges();	
+}
 
-				if (connect(main_socket, (sockaddr *) &sa, sizeof(sa)) == FAILURE)
-				{
-					continue;
-				}
-				
-				break; //successful connect
-			}
-		}
-		if (ai_ptr == NULL)
+
+void Station::connectbridges()
+{
+	int fails = 0;
+	char buffer[CONNECTIONRESPONSE];
+	memset(buffer, 0, CONNECTIONRESPONSE);
+	for (size_t i = 0; i < iface_list.size(); i++)
+	{
+		pair<string, string> info = readLinks(i);
+		string host = info.first, port = info.second;
+		sockaddr_in sa = getSockAddrInfo(htons(atoi(port.c_str())));
+		if (inet_aton(host.c_str(), (in_addr *) &sa.sin_addr.s_addr))
 		{
-			cerr << "Could not connect" << endl;
-			exit(1);
-		}
-		freeaddrinfo(server_info);
+			if ((main_socket = socket(AF_INET, SOCK_STREAM, 0)) == FAILURE)
+			{
+				cerr << "Failed to create socket" << endl;
+				exit(1);
+			}
+			if (connect(main_socket, (sockaddr *) &sa, sizeof(sa)) == FAILURE)
+			{
+				if (timeout(fails))	i--;
+				continue;
+			}
+			read(main_socket, buffer, CONNECTIONRESPONSE); //potentially non-blocking implementation needed?
+			buffer[CONNECTIONRESPONSE - 1] = 0;
+			if (strcmp(buffer, "reject") == 0) 
+			{
+				if (timeout(fails)) i--;
+				continue;
+			}
+		}		
 	}
+}
+
+bool Station::timeout(int& count) const
+{
+	count++;
+	if (count < MAXFAIL)
+	{
+		cerr << "Failed to Connect...Retrying..." << endl;				
+		this_thread::sleep_for(chrono::seconds(TIMEOUT));
+		return true;
+	}
+	cerr << "Failed to Connect" << endl;
+	return false;
 }
 
 void Station::ioListen()
@@ -138,6 +90,61 @@ void Station::ioListen()
 			delete msg;
 		}
 	}
+}
+pair<string,string> Station::readLinks(int index) const
+{
+	char str[INET6_ADDRSTRLEN];
+	memset(str,0,INET6_ADDRSTRLEN);
+	string aFile = "." + iface_list[index].lanname + ".addr";
+	string pFile = "." + iface_list[index].lanname + ".port"; 
+	cout << aFile << " " << pFile << endl;
+	readlink(aFile.c_str(), str, INET6_ADDRSTRLEN);
+	string host(str);
+	memset(str,0,INET6_ADDRSTRLEN);
+	readlink(pFile.c_str(), str, 5);
+	string port(str);
+	cout << "host: " << host << " :port: " << port << endl;
+	return make_pair(host, port);
+}
+
+
+void Station::populateHosts(string hostfile)
+{
+	fstream fs(hostfile.c_str());
+	string name, ip;
+	while (fs >> name)
+	{
+		fs >> ip;
+		host_list.push_back(Host(name, ip));
+	}
+	fs.close();
+}
+void Station::populateRouting(string rtablefile)
+{
+	fstream fs(rtablefile.c_str());
+	string dest, hop, mask, iface;
+	while (fs >> dest)
+	{
+		fs >> hop;
+		fs >> mask;
+		fs >> iface;
+		routing_table.push_back(Route(dest, hop, mask, iface));
+	}
+	fs.close();
+}
+void Station::populateInterfaces(string ifacefile)
+{
+	fstream fs(ifacefile.c_str());
+	string iface, ip, mk, mac, lan;
+	while (fs >> iface)
+	{
+		fs >> ip;
+		fs >> mk;
+		fs >> mac;
+		fs >> lan;
+		iface_list.push_back(Interface(iface, ip, mk, mac, lan));
+	}
+	fs.close();	
 }
 
 Station::~Station()

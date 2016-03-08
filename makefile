@@ -36,7 +36,7 @@ clean:
 	rm -f *.o bridge station
 
 tstation: station
-	station -route ifaces/ifaces.a rtables/rtable.a hosts
+	station -route ifaces/ifaces.b rtables/rtable.b hosts
 
 #%.o : %.cpp $(INCLUDES)
 #$(CC) $(CFLAGS) $<

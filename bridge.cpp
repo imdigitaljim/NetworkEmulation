@@ -64,7 +64,7 @@ Bridge::Bridge(string name, size_t ports) : current_ports(0) //TODO: start db cl
 		exit(1);
 	}
 	open_port = ntohs(serv_addr.sin_port);
-	lan_name = string(str);
+	inet_pton(AF_INET, str, &localIp);
 	GenerateInfoFiles();
 }
 
@@ -72,13 +72,14 @@ void Bridge::GenerateInfoFiles()
 {
 	cout << "creating file " << open_port << endl;
 	cout << "creating file " << lan_name << endl;
-	/*
 	string file_prefix = "." + lan_name + ".";
 	pFile = file_prefix + "port";
 	aFile = file_prefix + "addr";
 	symlink(to_string(open_port).c_str(), pFile.c_str());
-	symlink("0.0.0.0", aFile.c_str());
-	*/
+	char ip[INET6_ADDRSTRLEN];
+	inet_ntop(AF_INET, &localIp, ip, INET6_ADDRSTRLEN);
+	symlink(ip, aFile.c_str());
+	
 }
 
 void Bridge::checkExitServer()
@@ -138,13 +139,12 @@ void Bridge::checkNewConnections()
 			cout << "connect from '" + string(serv_info->ai_canonname) + "' at '" + to_string(ntohs(client_addr.sin_port)) + "'" << endl;	
 			//string admin_msg = "admin: connected to server on '" + string(serv_info->ai_canonname) + "' at '" + to_string(open_port) + "' thru '" + to_string(ntohs(client_addr.sin_port)) + "'";
 			string response("accept");
-			string send_msg = ultostr(response.length()) + response;
+			write(cd, response.c_str(), response.length());	
 		}
 		else
 		{
 			string response("reject");
-			string send_msg = ultostr(response.length()) + response;
-			write(cd, send_msg.c_str(), send_msg.length());		
+			write(cd, response.c_str(), response.length());		
 			close(cd);
 		}
 	

@@ -41,7 +41,7 @@ class Bridge : public Connection
 		size_t max_ports;
 		size_t current_ports;
 		string lan_name;
-		
+		IPAddr localIp;
 		unordered_map<string, ConnectionEntry> connections;
 };
 
