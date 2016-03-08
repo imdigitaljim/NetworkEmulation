@@ -21,6 +21,7 @@ Name: James Bach, Becky Powell
 #include <sstream>
 #include <limits.h>
 #include <list>
+#include <fstream>
 #define KEYBOARD 0
 #define FAILURE -1
 #define BACKLOG 5

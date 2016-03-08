@@ -8,7 +8,6 @@ Name: James Bach, Becky Powell
 #define _BRIDGE_H
 
 #include "connection.h"
-#include <fstream>
 #include <unordered_map>
 #define TTLMAX 360
 

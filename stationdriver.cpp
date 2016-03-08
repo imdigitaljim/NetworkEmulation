@@ -5,18 +5,30 @@ Name: James Bach, Becky Powell
 */
 
 #include "station.h"
-
+#define REQARGS 5
 using namespace std;
+
+bool isRouter(char* flag);
+bool isValidFile(char* filename);
 
 int main(int argc, char** argv)
 {	
-	if (argc != 5)
+	if (argc != REQARGS)
 	{
 		cerr << "usage: " << argv[0] << " <-no -route> <interface> <routingtable> <hostname>" << endl;
 		exit(1);
 	}
+	for (int i = 2; i < REQARGS; i++)
+	{
+		if (!isValidFile(argv[i]))
+		{
+			cerr << argv[i] << ": invalid file" << endl;
+			exit(1);
+		}	
+	}
+	string iface(argv[2]), rtable(argv[3]), hostfile(argv[4]);
 	/* initialization of hosts, interface, and routing tables */
-	Station conn(argv[1], argv[2]);	
+	Station conn(isRouter(argv[1]), iface, rtable, hostfile);	
 	/* hook to the lans that the station should connected to
 	* note that a station may need to be connected to multilple lans */
 	while(true)
@@ -30,6 +42,19 @@ int main(int argc, char** argv)
 		conn.ioListen();
 	}
 	return 0;
+}
+
+bool isRouter(char* flag)
+{
+	return strcmp(flag,"-route") == 0;
+}
+
+bool isValidFile(char* filename)
+{
+	fstream fs(filename, ios::in);
+	bool result = fs.is_open();
+	fs.close();
+	return result;
 }
 
 /*

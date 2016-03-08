@@ -6,9 +6,57 @@ Name: James Bach, Becky Powell
 
 #include "station.h"
 
-
-Station::Station(const char *host, const char *port)
+void Station::populateHosts(string hostfile)
 {
+	fstream fs(hostfile.c_str());
+	string name, ip;
+	while (!fs.eof())
+	{
+		fs >> name;
+		fs >> ip;
+		host_list.push_back(Host(name, ip));
+	}
+	fs.close();
+}
+void Station::populateRouting(string rtablefile)
+{
+	fstream fs(rtablefile.c_str());
+	string dest, hop, mask, iface;
+	while (!fs.eof())
+	{
+		fs >> dest;
+		fs >> hop;
+		fs >> mask;
+		fs >> iface;
+		routing_table.push_back(Route(dest, hop, mask, iface));
+	}
+	fs.close();
+}
+void Station::populateInterfaces(string ifacefile)
+{
+	fstream fs(ifacefile.c_str());
+	string iface, ip, mk, mac, lan;
+	while (!fs.eof())
+	{
+		fs >> iface;
+		fs >> ip;
+		fs >> mk;
+		fs >> mac;
+		fs >> lan;
+		iface_list.push_back(Interface(iface, ip, mk, mac, lan));
+	}
+	fs.close();
+	
+}
+Station::Station(bool isRouter, string ifacefile, string rtablefile, string hostfile)
+{
+	populateInterfaces(ifacefile);
+	populateRouting(rtablefile);
+	populateHosts(hostfile);
+	return;
+	
+	const char* host = "aksudhaskdu";
+	const char* port = "12355";
 	addrinfo *server_info;
 	sockaddr_in sa = getSockAddrInfo(htons(atoi(port))), *h;
 	if (inet_aton(host, (in_addr *) &sa.sin_addr.s_addr))

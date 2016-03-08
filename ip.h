@@ -11,7 +11,7 @@
 #define PROT_TYPE_TCP 1
 #define PROT_TYPE_OSPF 2
 
-typedef unsigned long IPAddr;
+
 
 /* Structure to represent an interface */
 
@@ -104,15 +104,7 @@ typedef struct packet_queue
 /*-------------------------------------------------------------------- */
 
 
-#define MAXHOSTS 32
-#define MAXINTER 32
 
-typedef struct host
-  {
-    char name[32];
-    IPAddr addr;
-  }
-Host;
 
 typedef struct lan_rout {
   short router_attached;
