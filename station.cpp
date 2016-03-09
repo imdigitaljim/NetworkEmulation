@@ -6,43 +6,43 @@ Name: James Bach, Becky Powell
 
 #include "station.h"
 
+#define NOENTRY ""
 
-
-Station::Station(bool isRouter, string ifacefile, string rtablefile, string hostfile)
+Station::Station(bool isRouter, string ifacefile, string rtablefile, string hostfile) : maxSock(0)
 {
 	populateInterfaces(ifacefile);
 	populateRouting(rtablefile);
 	populateHosts(hostfile);
 #if DEBUG
-		printTables();	
+	printTables();	
 #endif
 	connectbridges();	
 }
 
 
-void Station::connectbridges()
+void Station::connectbridges() //main socket needs to be a list of sockets
 {
-	int fails = 0, success = 0;
+	int fd, fails = 0;
 	memset(buffer, 0, CONNECTIONRESPONSE);
-	for (size_t i = 0; i < iface_list.size(); i++)
+	for (auto it = iface_list.begin(); it != iface_list.end(); ++it)
 	{
-		pair<string, string> info = readLinks(i);
+		pair<string, string> info = readLinks(it->lanname);
 		string host = info.first, port = info.second;
 		sockaddr_in sa = getSockAddrInfo(htons(atoi(port.c_str())));
 		if (inet_aton(host.c_str(), (in_addr *) &sa.sin_addr.s_addr))
 		{
-			if ((main_socket = socket(AF_INET, SOCK_STREAM, 0)) == FAILURE)
+			if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == FAILURE)
 			{
 				cerr << "Failed to create socket" << endl;
 				exit(1);
 			}
-			if (connect(main_socket, (sockaddr *) &sa, sizeof(sa)) == FAILURE)
+			if (connect(fd, (sockaddr *) &sa, sizeof(sa)) == FAILURE)
 			{
 				if (fails++ < MAXFAIL)
 				{
 					cerr << "Failed to Connect...Retrying..." << endl;				
 					this_thread::sleep_for(chrono::seconds(TIMEOUT));
-					i--;
+					it--;
 				}
 				else
 				{
@@ -51,26 +51,33 @@ void Station::connectbridges()
 				}
 				continue;
 			}
-			if (!isConnectionAccepted()) cerr << "Connection Rejected from Bridge" << endl;
-			success++;
+			if (!isConnectionAccepted(fd)) cerr << "Connection Rejected from Bridge" << endl;
+			connected_ifaces.push_back(Interface2Link(it->ifacename,fd));
 		}		
 	}
-	if (!success) exit(1); 
+	for (auto it = connected_ifaces.begin(); it != connected_ifaces.end(); ++it)
+	{
+		if (maxSock < it->sockfd)
+		{
+			maxSock = it->sockfd;
+		}
+	}
+	if (maxSock == 0)exit(1); 
 }
 
-bool Station::isConnectionAccepted() //non-blocking timeout
+bool Station::isConnectionAccepted(int fd) //non-blocking timeout
 {
 	int options, old_options, bytes_read;
 	bool result = false;
 	char buffer[CONNECTIONRESPONSE];
-	if ((old_options = fcntl(main_socket, F_GETFL)) == FAILURE)
+	if ((old_options = fcntl(fd, F_GETFL)) == FAILURE)
 	{
 		cerr << "Failed to get new socket connection options" << endl;
 		return false;
 	}
 	options = old_options;
 	options |= O_NONBLOCK;
-	if (fcntl(main_socket, F_SETFL, options) == FAILURE)
+	if (fcntl(fd, F_SETFL, options) == FAILURE)
 	{
 		cerr << "Failed to set new socket connection options" << endl;
 		return false;
@@ -79,7 +86,7 @@ bool Station::isConnectionAccepted() //non-blocking timeout
 	while (fails < MAXFAIL)
 	{
 		this_thread::sleep_for(chrono::seconds(TIMEOUT));
-		if ((bytes_read = read(main_socket, buffer, CONNECTIONRESPONSE)) > 0)
+		if ((bytes_read = read(fd, buffer, CONNECTIONRESPONSE)) > 0)
 		{
 			buffer[CONNECTIONRESPONSE - 1] = 0;
 			result = (strcmp(buffer, "accept") == 0);
@@ -89,7 +96,7 @@ bool Station::isConnectionAccepted() //non-blocking timeout
 		cerr << "Failed to Read...Retrying..." << endl;				
 		fails++;
 	}
-	if (fcntl(main_socket, F_SETFL, old_options) == FAILURE)
+	if (fcntl(fd, F_SETFL, old_options) == FAILURE)
 	{
 		cerr << "Failed to reset socket connection options" << endl;
 		exit(1);
@@ -100,7 +107,7 @@ bool Station::isConnectionAccepted() //non-blocking timeout
 
 void Station::ioListen()
 {
-	if (select(initReadSet(readset, main_socket), &readset, NULL, NULL, NULL) == FAILURE) //read up to max socket for activity
+	if (select(initReadSet(readset, maxSock), &readset, NULL, NULL, NULL) == FAILURE) //read up to max socket for activity
 	{
 		cerr << "Select failed" << endl;
 		exit(1);
@@ -114,7 +121,22 @@ void Station::ioListen()
 			string destination, user_msg;
 			cin >> destination;
 			getline(cin, user_msg);
-			DBGOUT(destination << " " << user_msg);
+			DBGOUT(destination << user_msg);
+			
+			string send_msg = buildMessagePkt(destination);
+			if (send_msg == NOENTRY)
+			{
+				cerr << destination << ": HOST NOT FOUND" << endl;
+			}
+			else if (send_msg == "ARPREQUEST")
+			{
+					//queue this packet and send ARP;
+			}
+			else
+			{
+				
+			}
+			//DBGOUT(send_msg);
 			//send message to user by name (build packet)
 			
 			//string send_msg = ultostr(user_msg.length()) + user_msg;
@@ -130,7 +152,7 @@ void Station::ioListen()
 			}
 			else if (input == "arp")
 			{
-				
+				printARPCache();
 			}
 			
 		}
@@ -140,28 +162,79 @@ void Station::ioListen()
 		}
 	
 	}
-	if (FD_ISSET(main_socket, &readset)) //server
+	for (auto it = connected_ifaces.begin(); it != connected_ifaces.end(); ++it)
 	{
-		int bytes_read;
-		if ((bytes_read = read(main_socket, buffer, MSGMAX)) == 0)
+		if (FD_ISSET(it->sockfd, &readset)) //server
 		{
-			cerr << "Disconnected from server." << endl;
-			exit(1);
-		}
-		else
-		{
-			getMessageBuffer(main_socket, bytes_read);
-			cout << msg << endl;
-			delete msg;
+			int bytes_read;
+			if ((bytes_read = read(it->sockfd, buffer, MSGMAX)) == 0)
+			{
+				cerr << it->ifacename << "Disconnected from server." << endl;
+				connected_ifaces.erase(it--);
+			}
+			else
+			{
+				getMessageBuffer(it->sockfd, bytes_read);
+				cout << msg << endl;
+				delete msg;
+			}
 		}
 	}
+	
 }
-pair<string,string> Station::readLinks(int index) const
+
+string Station::buildMessagePkt(string dest)
+{
+	string result, iface_out;
+	MacAddr host_mac, peer_mac;
+	IPAddr destIP, gatewayIP;
+	for (auto it = host_list.begin(); it != host_list.end(); ++it)
+	{
+		if (it->name == dest)
+		{
+			destIP = it->addr;
+			result = dest;
+			DBGOUT("HOST: " << result);
+			break;
+		}
+	}
+	if (result == NOENTRY) return NOENTRY;
+	for (auto it = routing_table.begin(); it != routing_table.end(); ++it)
+	{	
+		if (ipv4_2_str(destIP & it->mask) == ipv4_2_str(it->destsubnet))
+		{
+			gatewayIP = it->nexthop;
+			iface_out = it->ifacename;
+			DBGOUT("GATEWAYIP: " << ipv4_2_str(gatewayIP) << " ON " << iface_out);
+			break;
+		}
+	}
+	for (auto it = iface_list.begin(); it != iface_list.end(); ++it)
+	{
+		if (it->ifacename == iface_out)
+		{
+			host_mac = it->macaddr;
+			DBGOUT("INTERFACE: " << host_mac);
+			break;
+		}
+	}
+	for (auto it = arp_cache.begin(); it != arp_cache.end(); ++it)
+	{
+		if (it->ipaddr == destIP)
+		{
+			peer_mac = it->macaddr;
+		}
+	}
+	if (peer_mac == NOENTRY) return "ARPREQUEST";
+	//build ip/ethernet packets
+	return result;
+}
+pair<string,string> Station::readLinks(string name) const
 {
 	char str[INET6_ADDRSTRLEN];
 	memset(str,0,INET6_ADDRSTRLEN);
-	string aFile = "." + iface_list[index].lanname + ".addr";
-	string pFile = "." + iface_list[index].lanname + ".port"; 
+	string aFile = "." + name + ".addr";
+	string pFile = "." + name + ".port"; 
 	readlink(aFile.c_str(), str, INET6_ADDRSTRLEN);
 	string host(str);
 	memset(str,0,INET6_ADDRSTRLEN);
@@ -182,6 +255,7 @@ void Station::populateHosts(string hostfile)
 	}
 	fs.close();
 }
+
 void Station::populateRouting(string rtablefile)
 {
 	fstream fs(rtablefile.c_str());
@@ -195,6 +269,7 @@ void Station::populateRouting(string rtablefile)
 	}
 	fs.close();
 }
+
 void Station::populateInterfaces(string ifacefile)
 {
 	fstream fs(ifacefile.c_str());
@@ -210,54 +285,46 @@ void Station::populateInterfaces(string ifacefile)
 	fs.close();	
 }
 
+void Station::printARPCache() const
+{
+	
+}
+
 void Station::printTables() const
 {
-	char str[INET6_ADDRSTRLEN];	
-	memset(str, 0, INET6_ADDRSTRLEN);
 	string dhr("================================================================================\n");
 	string hr("--------------------------------------------------------------------------------\n");
 	cout << dhr << "HOSTS\n" << dhr;
-	cout << setw(INET_ADDRSTRLEN ) << left << "STATION NAME" << setw(INET_ADDRSTRLEN ) << left << "STATION IP" << endl;
+	cout << setw(INET_ADDRSTRLEN ) << left << "STATION NAME" << setw(INET_ADDRSTRLEN) << left << "STATION IP" << endl;
 	cout << hr;
-	for (size_t i = 0; i < host_list.size(); i++)
+	for (auto it = host_list.begin(); it != host_list.end(); ++it)
 	{
-		inet_ntop(AF_INET, &host_list[i].addr, str, INET6_ADDRSTRLEN);
-		cout << setw(INET_ADDRSTRLEN) << left << host_list[i].name << setw(INET_ADDRSTRLEN ) << left << str << endl;
-		memset(str, 0, INET6_ADDRSTRLEN);
+		cout << setw(INET_ADDRSTRLEN) << left << it->name;
+		cout << setw(INET_ADDRSTRLEN ) << left << ipv4_2_str(it->addr) << endl;
 	}
 	cout << dhr << "ROUTING TABLE\n" << dhr;
 	cout << setw(INET_ADDRSTRLEN) << left << "DESTINATION IP" << setw(INET_ADDRSTRLEN) << left << "NEXT-HOP IP";
 	cout << setw(INET_ADDRSTRLEN) << left << "SUBNET MASK" << setw(INET_ADDRSTRLEN) << left << "INTERFACE NAME" << endl;
 	cout << hr;
-	for (size_t i = 0; i < routing_table.size(); i++)
+	for (auto it = routing_table.begin(); it != routing_table.end(); ++it)
 	{
-		inet_ntop(AF_INET, &routing_table[i].destsubnet, str, INET6_ADDRSTRLEN);
-		cout << setw(INET_ADDRSTRLEN) << left << str;
-		memset(str, 0, INET6_ADDRSTRLEN);
-		inet_ntop(AF_INET, &routing_table[i].nexthop, str, INET6_ADDRSTRLEN);
-		cout << setw(INET_ADDRSTRLEN) << left << str;
-		memset(str, 0, INET6_ADDRSTRLEN);
-		inet_ntop(AF_INET, &routing_table[i].mask, str, INET6_ADDRSTRLEN);
-		cout << setw(INET_ADDRSTRLEN) << left << str;
-		cout << setw(INET_ADDRSTRLEN) << left << routing_table[i].ifacename << endl;
-		memset(str, 0, INET6_ADDRSTRLEN);
+		cout << setw(INET_ADDRSTRLEN) << left << ipv4_2_str(it->destsubnet);
+		cout << setw(INET_ADDRSTRLEN) << left << ipv4_2_str(it->nexthop);
+		cout << setw(INET_ADDRSTRLEN) << left << ipv4_2_str(it->mask);
+		cout << setw(INET_ADDRSTRLEN) << left << it->ifacename << endl;
 	}
 	cout << dhr << "INTERFACES\n" << dhr;
 	cout << setw(INET_ADDRSTRLEN) << left << "STATION NAME" << setw(INET_ADDRSTRLEN) << left << "STATION IP";
 	cout << setw(INET_ADDRSTRLEN) << left << "SUBNET MASK" << setw(INET_MACSTRLEN) << left << "MAC ADDRESS";
 	cout << setw(INET_ADDRSTRLEN) << left << "LANNAME" << endl;
 	cout << hr;
-	for (size_t i = 0; i < iface_list.size(); i++)
+	for (auto it = iface_list.begin(); it != iface_list.end(); ++it)
 	{
-		inet_ntop(AF_INET, &iface_list[i].ipaddr, str, INET6_ADDRSTRLEN);
-		cout << setw(INET_ADDRSTRLEN) << left << iface_list[i].ifacename;
-		cout << setw(INET_ADDRSTRLEN) << left << str;
-		memset(str, 0, INET6_ADDRSTRLEN);
-		inet_ntop(AF_INET, &iface_list[i].mask, str, INET6_ADDRSTRLEN);
-		cout << setw(INET_ADDRSTRLEN) << left << str;
-		cout << setw(INET_MACSTRLEN) << left << iface_list[i].macaddr;
-		cout << setw(INET_ADDRSTRLEN) << left << iface_list[i].lanname << endl;
-		memset(str, 0, INET6_ADDRSTRLEN);
+		cout << setw(INET_ADDRSTRLEN) << left << it->ifacename;
+		cout << setw(INET_ADDRSTRLEN) << left << ipv4_2_str(it->ipaddr);
+		cout << setw(INET_ADDRSTRLEN) << left << ipv4_2_str(it->mask);
+		cout << setw(INET_MACSTRLEN) << left << it->macaddr;
+		cout << setw(INET_ADDRSTRLEN) << left << it->lanname << endl;
 	}
 	cout << dhr;
 }

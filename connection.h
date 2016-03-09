@@ -34,7 +34,6 @@ Name: James Bach, Becky Powell
 #include <utility>
 #include <iomanip>
 
-
 #define KEYBOARD 0
 #define FAILURE -1
 #define BACKLOG 5
@@ -48,7 +47,7 @@ Name: James Bach, Becky Powell
 
 #define DEBUG true
 #if DEBUG
-#define DBGOUT(x) std::cout << x << std::endl
+#define DBGOUT(x) std::cout << "DEBUG:" << x << std::endl
 #else
 #define DBGOUT(x)
 #endif
@@ -58,12 +57,17 @@ using namespace std;
 typedef unsigned long IPAddr;
 typedef string MacAddr;
 
+enum ARPTYPE {ARP_REQUEST, ARP_RESPONSE};
+enum FRAMETYPE {IPFRAME, ARPFRAME};
+
 class Connection
 {
 	protected:
+		string ipv4_2_str(IPAddr) const;
+		IPAddr str_2_ipv4(string) const;
 		int initReadSet(fd_set& rs, int ms, list<int> *cL = nullptr);
 		addrinfo getHints(int flags);
-		string ultostr(unsigned long int);
+		string ultostr(unsigned long int) const;
 		sockaddr_in getSockAddrInfo(int port);
 		void getMessageBuffer(int sock, int bytes);
 		virtual void ioListen() = 0;
@@ -78,7 +82,7 @@ class Connection
 class Host
 {
 	public:
-		Host(string n, string ip)
+		Host(string n, string ip) : addr(0)
 		{
 			name = n;
 			inet_pton(AF_INET, ip.c_str(), &addr);
@@ -91,7 +95,7 @@ class Host
 class Route
 {
 	public:
-		Route(string dest, string hop, string mk, string name)
+		Route(string dest, string hop, string mk, string name) : destsubnet(0), nexthop(0), mask(0)
 		{
 			inet_pton(AF_INET, dest.c_str(), &destsubnet);
 			inet_pton(AF_INET, hop.c_str(), &nexthop);
@@ -109,7 +113,7 @@ class Route
 class Interface
 {
 	public:
-		Interface(string name, string ip, string mk, string mac, string lan)
+		Interface(string name, string ip, string mk, string mac, string lan) : ipaddr(0), mask(0)
 		{
 			ifacename = name;
 			inet_pton(AF_INET, ip.c_str(), &ipaddr);
@@ -123,6 +127,65 @@ class Interface
 		MacAddr macaddr;
 		string lanname;
 };
+
+class Interface2Link{
+	public:
+		Interface2Link(string ifc, int fd) : ifacename(ifc), sockfd(fd){}
+		string ifacename;
+		int sockfd;
+};
+
+class ARP_Entry {
+	public:
+		ARP_Entry(IPAddr ip, string mac) : ipaddr(ip), macaddr(mac) {}
+		IPAddr ipaddr;
+		MacAddr macaddr;
+};
+
+class ARP_Pkt 
+{
+	public:
+	  short op; /* op =0 : ARP request; op = 1 : ARP response */
+	  IPAddr srcip;
+	  MacAddr srcmac;
+	  IPAddr dstip;
+	  MacAddr dstmac;
+};
+
+class IP_Pkt
+{
+	public:
+		IPAddr  dstip;
+		IPAddr  srcip;
+};
+
+
+class Ethernet_Pkt 
+{
+	public:	
+		MacAddr dst; /* destination address in net order */
+		MacAddr src; /* source address in net order */
+		FRAMETYPE type; /* enum FRAMETYPE {IPFRAME, ARPFRAME}; */
+		string data; 
+
+};
+
+/*queue for ip packet that has not yet sent out*/
+class ARPWait_Pkt
+{
+  IPAddr next_hop_ipaddr;
+  IPAddr dst_ipaddr;
+  string data;
+};
+
+/*queue to remember the packets we have received
+typedef struct packet_queue
+{
+  char *packet;
+  int  length;
+  short counter;
+} OLD_PACKETS;
+*/
 
 
 

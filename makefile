@@ -1,6 +1,6 @@
 #Course: CNT5505 - Data Networks and Communications
 #Semester: Spring 2016
-#Name: James Bach
+#Name: James Bach, Becky Powell
 #
 # Compile using on linprog
 #
@@ -33,7 +33,7 @@ station.o: station.h station.cpp connection.o
 	$(CC) $(CFLAGS) -c station.cpp
 	
 clean:
-	rm -f *.o bridge station
+	rm -f *.o bridge station .cs*
 
 tstation: station
 	station -route ifaces/ifaces.b rtables/rtable.b hosts

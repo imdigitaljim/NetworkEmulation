@@ -13,7 +13,6 @@ Bridge::Bridge(string name, size_t ports) : current_ports(0) //TODO: start db cl
 	lan_name = name;
 	int optval = true;
 	char hostname[HOST_NAME_MAX];
-	char str[INET6_ADDRSTRLEN];
 	sockaddr_in serv_addr = getSockAddrInfo(htons(0));
 	addrinfo hints = getHints(AI_CANONNAME | AI_PASSIVE), *serv_info, *p;
 	socklen_t salen = sizeof(serv_addr);
@@ -46,7 +45,7 @@ Bridge::Bridge(string name, size_t ports) : current_ports(0) //TODO: start db cl
 		break;
 	}
 	sockaddr_in *ipv4 = (sockaddr_in*)p->ai_addr;
-	inet_ntop(p->ai_family, &ipv4->sin_addr, str, sizeof(str));
+	localIp = ipv4->sin_addr.s_addr;
 	if (p == NULL)
 	{
 		cerr << "Failed to bind." << endl;
@@ -64,22 +63,18 @@ Bridge::Bridge(string name, size_t ports) : current_ports(0) //TODO: start db cl
 		exit(1);
 	}
 	open_port = ntohs(serv_addr.sin_port);
-	inet_pton(AF_INET, str, &localIp);
 	GenerateInfoFiles();
 }
 
 void Bridge::GenerateInfoFiles()
 {
-	cout << "creating file " << open_port << endl;
-	cout << "creating file " << lan_name << endl;
 	string file_prefix = "." + lan_name + ".";
 	pFile = file_prefix + "port";
 	aFile = file_prefix + "addr";
 	symlink(to_string(open_port).c_str(), pFile.c_str());
-	char ip[INET6_ADDRSTRLEN];
-	inet_ntop(AF_INET, &localIp, ip, INET6_ADDRSTRLEN);
-	symlink(ip, aFile.c_str());
-	
+	symlink(ipv4_2_str(localIp).c_str(), aFile.c_str());	
+	DBGOUT("CREATED FILE " << pFile << "POINTING TO " << to_string(open_port).c_str());
+	DBGOUT("CREATED FILE " << aFile << "POINTING TO " << ipv4_2_str(localIp).c_str());
 }
 
 void Bridge::checkExitServer()
@@ -103,7 +98,6 @@ void Bridge::checkNewConnections()
 		addrinfo hints = getHints(AI_CANONNAME | AI_PASSIVE);
 		addrinfo *serv_info;
 		sockaddr_in client_addr;
-		char ipstr[INET6_ADDRSTRLEN];
 		socklen_t calen = sizeof(client_addr);
 		if ((cd = accept(main_socket, (sockaddr* ) &client_addr, &calen)) == FAILURE)
 		{
@@ -126,8 +120,7 @@ void Bridge::checkNewConnections()
 			cerr << "No socket found!" << endl;
 			exit(1);
 		}
-		inet_ntop(AF_INET, &client_addr.sin_addr, ipstr, sizeof(ipstr));
-		if (getaddrinfo(ipstr, NULL, &hints, &serv_info) == FAILURE)
+		if (getaddrinfo(ipv4_2_str(client_addr.sin_addr.s_addr).c_str(), NULL, &hints, &serv_info) == FAILURE)
 		{
 			cerr << "Failed to get address info " << endl;
 			exit(1);

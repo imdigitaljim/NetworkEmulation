@@ -6,12 +6,27 @@ Name: James Bach, Becky Powell
 
 #include "connection.h"
 
-string Connection::ultostr(unsigned long int x)
+string Connection::ultostr(unsigned long int x) const
 {
 	stringstream ss;
 	string result;
 	ss << setfill('0') << setw(MSGMAX) << to_string(x);
 	return ss.str();
+}
+
+string Connection::ipv4_2_str(IPAddr x) const
+{
+	char str[INET6_ADDRSTRLEN];	
+	memset(str, 0, INET6_ADDRSTRLEN);
+	inet_ntop(AF_INET, &x, str, INET6_ADDRSTRLEN);
+	return string(str);
+}
+
+IPAddr Connection::str_2_ipv4(string x) const
+{
+	IPAddr result;
+	inet_pton(AF_INET, x.c_str(), &result);
+	return result;
 }
 
 int Connection::initReadSet(fd_set& rs, int ms, list<int> *cL)

@@ -18,6 +18,7 @@ Name: James Bach, Becky Powell
 #include "connection.h"
 
 
+
 class Station : public Connection
 {
 	
@@ -26,62 +27,30 @@ class Station : public Connection
 		~Station();
 		
 		void ioListen();
-		void connectbridges();
 		void printTables() const;
+		void printARPCache() const;
+
 	private:
+
+		string buildMessagePkt(string dest);
 		void populateHosts(string hostfile);
 		void populateRouting(string rtable);
 		void populateInterfaces(string iface);
-		pair<string,string> readLinks(int index) const;
-		bool isConnectionAccepted();
+		void connectbridges();
+		
+		pair<string,string> readLinks(string name) const;
+		bool isConnectionAccepted(int fd);
+		int maxSock;
 		string server_ip;
-		vector<Host> host_list;
-		vector<Route> routing_table;
-		vector<Interface> iface_list;
+		
+		list<Host> host_list;
+		list<Route> routing_table;
+		list<Interface> iface_list;
+		list<Interface2Link> connected_ifaces;
+		list<ARP_Entry> arp_cache;
+		list<ARPWait_Pkt> arp_queue;
 };
+
+
 #endif
 
-
-/* REMAINING UNUSED/UNCONVERTED TEMPLATE CODE */
-
-/* IP.H */
-
-/* ARP packet types */
-#define ARP_REQUEST 0
-#define ARP_RESPONSE 1
-
-/* IP protocol types */
-#define PROT_TYPE_UDP 0
-#define PROT_TYPE_TCP 1
-#define PROT_TYPE_OSPF 2
-
-
-/* ETHER.H */
-
-#define PEER_CLOSED 2
-#define TYPE_IP_PKT 1
-#define TYPE_ARP_PKT 0
-
-/* structure of an ethernet pkt */
-typedef struct __etherpkt 
-{
-  /* destination address in net order */
-  MacAddr dst;
-
-  /* source address in net order */
-  MacAddr src;
-
-  /************************************/
-  /* payload type in host order       */
-  /* type = 0 : ARP frame             */
-  /* type = 1 : IP  frame             */
-  /************************************/
-  short  type;
-  
-  /* size of the data in host order */
-  short   size;
-
-  /* actual payload */
-  char *  dat;
-
-} EtherPkt;
