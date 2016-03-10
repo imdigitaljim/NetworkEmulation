@@ -63,7 +63,7 @@ class Interface2Link{
 class ARP_Entry : public INET
 {
 	public:
-		ARP_Entry(IPAddr ip, string mac) : ipaddr(ip), macaddr(mac) {}
+		ARP_Entry(IPAddr ip, MacAddr mac) : ipaddr(ip), macaddr(mac) {}
 		IPAddr ipaddr;
 		MacAddr macaddr;
 };

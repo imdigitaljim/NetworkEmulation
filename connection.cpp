@@ -6,6 +6,7 @@ Name: James Bach, Becky Powell
 
 #include "connection.h"
 
+
 string Connection::ultostr(unsigned long int x) const
 {
 	stringstream ss;
@@ -15,12 +16,46 @@ string Connection::ultostr(unsigned long int x) const
 }
 void Connection::sendPacket(const Ethernet_Pkt& e, int fd)
 {
+	if (fd == FAILURE)
+	{
+		cerr << "(sendpacket) NO AVAILABLE CONNECTIONS" << endl;
+		return;
+	}
 	string msg = e.serialize();
 	string send_msg = ultostr(msg.length()) + msg;
-	DBGOUT(send_msg);
+	DBGOUT("SENDING PACKET TO: " << fd << endl << send_msg);
 	write(fd, send_msg.c_str(), send_msg.length());
+	
 }
 
+bool Connection::readPreamble(int fd, char* buffer)
+{
+	int bytes_read = read(fd, buffer, MSGMAX);
+	return bytes_read > 0;
+}
+
+char* Connection::receivePacket(int sock, char* buffer)
+{
+	buffer[MSGMAX] = 0;			
+	PREAMBLE len = strtoul(buffer, NULL, 10);
+	DBGOUT("RECEIVED MSG OF LENGTH " << len);
+	char* msg = new char[len + 1];
+	memset(msg, 0, len + 1);
+	read(sock, msg, len);
+	msg[len] = 0;
+	DBGOUT("***" << msg << "***");
+	return msg;
+}
+
+/*
+bool Connection::msgIsValid(char* msg) const 
+{
+	return !(strcmp(msg, " ") == 0 
+	|| strcmp(msg, "\n") == 0 
+	|| strcmp(msg, "\r") == 0 
+	|| strlen(msg) == 0);
+}
+*/
 
 int Connection::initReadSet(fd_set& rs, int ms, list<int> *cL)
 {
@@ -37,17 +72,6 @@ int Connection::initReadSet(fd_set& rs, int ms, list<int> *cL)
 		}
 	}
 	return maxSocket + 1;
-}
-
-void Connection::getMessageBuffer(int sock, int bytes)
-{
-	buffer[MSGMAX] = 0;			
-	unsigned long len = strtoul(buffer, NULL, 10);
-	msg = new char[len + 1];
-	memset(msg, 0, len + 1);
-	read(sock, msg, len);
-	//EXTRACT OTHER INFO
-	msg[len] = 0;
 }
 
 addrinfo Connection::getHints(int flags)

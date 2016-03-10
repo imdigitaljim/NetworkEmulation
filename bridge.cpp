@@ -39,6 +39,7 @@ Bridge::Bridge(string name, size_t ports) : current_ports(0) //TODO: start db cl
 		}
 		if (bind(main_socket, p->ai_addr, p->ai_addrlen) == FAILURE)
 		{
+			close(main_socket);
 			continue;
 		}
 		break;
@@ -127,9 +128,10 @@ void Bridge::checkNewConnections()
 		if (current_ports < max_ports)
 		{
 			current_ports++;
+			DBGOUT("PORTS AVAILABLE: " << max_ports - current_ports);
 			conn_list.push_back(cd);
 			cout << "connect from '" + string(serv_info->ai_canonname) + "' at '" + to_string(ntohs(client_addr.sin_port)) + "'" << endl;	
-			//string admin_msg = "admin: connected to server on '" + string(serv_info->ai_canonname) + "' at '" + to_string(open_port) + "' thru '" + to_string(ntohs(client_addr.sin_port)) + "'";
+			printConnections();
 			string response("accept");
 			write(cd, response.c_str(), response.length());	
 		}
@@ -150,11 +152,11 @@ void Bridge::checkNewMessages()
 	{
 		if (FD_ISSET(*it, &readset))
 		{	
-			int bytes_read;
 			sockaddr_in client_addr;
 			socklen_t calen = sizeof(client_addr);
+			char buffer[MSGMAX + 1];
 			memset(buffer, 0, MSGMAX + 1);
-			if ((bytes_read = read(*it, buffer, MSGMAX)) == 0)
+			if (!readPreamble(*it, buffer))
 			{
 				//disconnect
 				current_ports--;
@@ -162,56 +164,71 @@ void Bridge::checkNewMessages()
 				DBGOUT("(" << to_string(ntohs(client_addr.sin_port)) << ")" << string(inet_ntoa(client_addr.sin_addr)) << " has disconnected.");
 				close(*it);
 				it = conn_list.erase(it--);
+				DBGOUT("PORTS AVAILABLE: " << max_ports - current_ports);
 				
 			}
 			else
 			{
 				getpeername(*it, (sockaddr*)&client_addr, &calen);
-				readMessage(*it, bytes_read);	
-				if (msgIsValid()) //not random empty data message?
+				char* msg = receivePacket(*it, buffer); //reads packet into msg  	
+				Ethernet_Pkt e(msg);
+				DBGOUT("FORWARDING PACKET" << e.serialize());
+#if DEBUG
+				if (e.type == ARP_REQUEST || e.type == ARP_RESPONSE)
 				{
-					Ethernet_Pkt e(msg);
-					//DBGOUT(e.serialize());
-			
-					connections[e.src] = ConnectionEntry(*it); //adds AND refreshes entry	
-					if (connections.count(e.dst) > 0) // it knows the destination
-					{
-						sendPacket(e, connections[e.dst].port);
-					}
-					else //broadcast message
-					{
-						for (auto it2 = conn_list.begin(); it2 != conn_list.end(); it2++)
-						{
-							if (*it != *it2)
-							{
-								sendPacket(e, *it2);	
-							}
-						}
-					}					
+					DBGOUT("ARP PACKET!");
 				}
-				
+#endif
+				connections[e.src] = ConnectionEntry(*it); //adds AND refreshes entry
+				printConnections();
+				DBGOUT("e.dst is " << e.dst);
+				DBGOUT("e.src is " << e.src);
+				if (e.dst != NOENTRY && connections.count(e.dst) > 0) // it knows the destination
+				{
+					DBGOUT("FOUND MAC - SENDING MSG TO:" << e.dst << " ON " << connections[e.dst].port);
+					sendPacket(e, connections[e.dst].port);
+				}
+				else //broadcast message
+				{
+					DBGOUT("MAC NOT FOUND - BROADCASTING MSG");
+					for (auto it2 = conn_list.begin(); it2 != conn_list.end(); it2++)
+					{
+						if (*it != *it2)
+						{
+							sendPacket(e, *it2);	
+						}
+					}
+					DBGOUT("END OF BROADCASTING MSG");
+				}							
 				delete msg;
 			}
 		}
 	}
 }
 
-void Bridge::readMessage(int sock, int bytes)
+void Bridge::printConnections() const
 {
-	buffer[MSGMAX] = 0;			
-	unsigned long len = strtoul(buffer, NULL, 10);
-	msg = new char[len + 1];
-	memset(msg, 0, len + 1);
-	read(sock, msg, len);
-	msg[len] = 0;
+	string dhr("=======================================================\n");
+	string hr("--------------------------------------------------------\n");
+	cout << dhr << "BROADCAST CONNECTION LIST\n" << dhr;
+	cout << setw(7) << left << "FD" << endl;
+	cout << hr;
+	for (auto it = conn_list.begin(); it != conn_list.end(); ++it)
+	{
+		cout << *it << endl;
+	}
+	cout << dhr;
+	cout << dhr << "MAC CACHE\n" << dhr;
+	cout << setw(INET_MACSTRLEN) << left << "MAC ADDRESS" << setw(7) << left << "FD" << setw(5) << "TTL" << endl;
+	cout << hr;
+	for (auto it = connections.begin(); it != connections.end(); ++it)
+	{
+		cout << setw(INET_MACSTRLEN) << left << it->first;
+		cout << setw(7) << left << it->second.port;
+		cout << setw(5) << left << it->second.TTL << endl;
+	}
+	cout << dhr;
 }
-
-bool Bridge::msgIsValid() const
-{
-	return !(strcmp(msg, " ") == 0 || strcmp(msg, "\n") == 0 ||
-	   strcmp(msg, "\r") == 0 || strlen(msg) == 0);
-}
-
 
 void Bridge::ioListen()
 {

@@ -9,7 +9,6 @@ Name: James Bach, Becky Powell
 
 #include "connection.h"
 
-
 #define TTLMAX 360
 
 class ConnectionEntry
@@ -27,21 +26,23 @@ class Bridge : public Connection
 		Bridge(string name, size_t ports);
 		~Bridge(); 
 		void ioListen();
-		
+		void printConnections() const;
 	private:
 		void checkExitServer();
 		void checkNewConnections();
 		void checkNewMessages();
-		bool msgIsValid() const;
+
 		void GenerateInfoFiles();
-		void readMessage(int sock, int bytes); //de-layer the message
 		
+	
 		/*id information about the bridge*/
 		string pFile, aFile; //port and address files saved if needed
 		int open_port; //port open
 		IPAddr localIp;
 		string lan_name;
 		int main_socket;
+		
+
 		
 		/*fd connections to read through*/
 		list<int> conn_list;

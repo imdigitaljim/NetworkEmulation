@@ -32,6 +32,9 @@ class Station : public Connection
 
 	private:
 		Ethernet_Pkt buildMessagePkt(string dest, string msg);
+		Ethernet_Pkt buildReturnPkt(const Ethernet_Pkt& e);
+		void SendAwaitingARP(const Ethernet_Pkt& e);
+		
 		void populateHosts(string hostfile);
 		void populateRouting(string rtable);
 		void populateInterfaces(string iface);
@@ -39,7 +42,17 @@ class Station : public Connection
 		
 		pair<string,string> readLinks(string name) const;
 		bool isConnectionAccepted(int fd);
+		
+		bool ownsPacket(const Ethernet_Pkt& e);
+		int getConnection(const Ethernet_Pkt& e) const;
+		
+		void SetMaxSocket();		
 		int maxSock;
+		
+		const bool isRouter;
+		
+		size_t sequenceNo;
+		size_t getSequenceNumber();
 		
 		list<Host> host_list;
 		list<Route> routing_table;

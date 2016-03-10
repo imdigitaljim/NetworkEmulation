@@ -44,6 +44,7 @@ Name: James Bach, Becky Powell
 #define sockaddr struct sockaddr
 #define in_addr struct in_addr
 #define INET_MACSTRLEN 18
+#define NOENTRY ""
 
 #define DEBUG true
 #if DEBUG
@@ -62,14 +63,15 @@ class Connection : public INET
 		addrinfo getHints(int flags);
 		string ultostr(unsigned long int) const;
 		sockaddr_in getSockAddrInfo(int port);
-		void getMessageBuffer(int sock, int bytes);
 		virtual void ioListen() = 0;
+		
+		
 		void sendPacket(const Ethernet_Pkt& e, int fd);
+		char* receivePacket(int sock, char* buffer);
+		bool readPreamble(int fd, char* buffer);
 
 		fd_set readset;
-		
-		
-		char buffer[MSGMAX + 1], *msg;				
+				
 };
 
 

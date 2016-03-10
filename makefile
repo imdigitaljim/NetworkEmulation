@@ -35,8 +35,26 @@ station.o: station.h station.cpp connection.o
 clean:
 	rm -f *.o bridge station .cs*
 
-tstation: station
-	station -route ifaces/ifaces.b rtables/rtable.b hosts
+btstation: station
+	station -no ifaces/ifaces.b rtables/rtable.b hosts
+	
+atstation: station
+	station -no ifaces/ifaces.a rtables/rtable.a hosts
+
+ctstation: station
+	station -no ifaces/ifaces.c rtables/rtable.c hosts
+dtstation: station
+	station -no ifaces/ifaces.d rtables/rtable.d hosts
+etstation: station 	
+	station -no ifaces/ifaces.e rtables/rtable.e hosts
+	
+rtastation: station
+	station -route ifaces/ifaces.r2 rtables/rtable.r2 hosts
+rtbstation: station
+	station -route ifaces/ifaces.r1 rtables/rtable.r1 hosts
+rtcstation: station
+	station -route ifaces/ifaces.r3 rtables/rtable.r3 hosts
+	
 
 #%.o : %.cpp $(INCLUDES)
 #$(CC) $(CFLAGS) $<

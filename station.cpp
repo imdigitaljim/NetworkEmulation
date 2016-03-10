@@ -6,9 +6,10 @@ Name: James Bach, Becky Powell
 
 #include "station.h"
 
-#define NOENTRY ""
-#define ARPREQUEST "ARPREQUEST"
-Station::Station(bool isRouter, string ifacefile, string rtablefile, string hostfile) : maxSock(0)
+#define MAXSQNUM 100000 
+#define LOCALIP "0.0.0.0"
+
+Station::Station(bool route, string ifacefile, string rtablefile, string hostfile) : isRouter(route)
 {
 	populateInterfaces(ifacefile);
 	populateRouting(rtablefile);
@@ -20,24 +21,31 @@ Station::Station(bool isRouter, string ifacefile, string rtablefile, string host
 }
 
 
-void Station::connectbridges() //main socket needs to be a list of sockets
+void Station::connectbridges()
 {
 	int fd, fails = 0;
-	memset(buffer, 0, CONNECTIONRESPONSE);
 	for (auto it = iface_list.begin(); it != iface_list.end(); ++it)
 	{
 		pair<string, string> info = readLinks(it->lanname);
 		string host = info.first, port = info.second;
-		sockaddr_in sa = getSockAddrInfo(htons(atoi(port.c_str())));
-		if (inet_aton(host.c_str(), (in_addr *) &sa.sin_addr.s_addr))
+		addrinfo hints = getHints(AI_CANONNAME | AI_PASSIVE), *serv_info, *p;	
+		if (getaddrinfo(host.c_str(), port.c_str(), &hints, &serv_info) == FAILURE) 
 		{
-			if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == FAILURE)
+			cerr << "Failed to get address info" << endl;
+			exit(1);
+		}
+
+		// loop through all the results and connect to the first we can
+		for(p = serv_info; p != NULL; p = p->ai_next) 
+		{
+			if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == FAILURE) 
 			{
-				cerr << "Failed to create socket" << endl;
-				exit(1);
+				continue;
 			}
-			if (connect(fd, (sockaddr *) &sa, sizeof(sa)) == FAILURE)
+
+			if (connect(fd, p->ai_addr, p->ai_addrlen) == FAILURE) 
 			{
+				close(fd);
 				if (fails++ < MAXFAIL)
 				{
 					cerr << "Failed to Connect...Retrying..." << endl;				
@@ -47,14 +55,22 @@ void Station::connectbridges() //main socket needs to be a list of sockets
 				else
 				{
 					cerr << "Connection to Interface Failed" << endl;
-					exit(1);
+					return;
 				}
 				continue;
 			}
-			if (!isConnectionAccepted(fd)) cerr << "Connection Rejected from Bridge" << endl;
-			connected_ifaces[it->ifacename] = fd;
-		}		
+			break;
+		}
+		//freeaddrinfo(serv_info); // all done with this structure
+		if (!isConnectionAccepted(fd)) cerr << "Connection Rejected from Bridge" << endl;
+		connected_ifaces[it->ifacename] = fd;
 	}
+}
+
+
+void Station::SetMaxSocket()
+{
+	maxSock = KEYBOARD;
 	for (auto it = connected_ifaces.begin(); it != connected_ifaces.end(); ++it)
 	{
 		if (maxSock < it->second)
@@ -62,14 +78,17 @@ void Station::connectbridges() //main socket needs to be a list of sockets
 			maxSock = it->second;
 		}
 	}
-	if (maxSock == 0)exit(1); 
+	DBGOUT("MAXSOCK IS " << maxSock);
+	if (maxSock == KEYBOARD) cerr << "(setmaxsocket)  NO AVAILABLE CONNECTIONS" << endl;
 }
+
 
 bool Station::isConnectionAccepted(int fd) //non-blocking timeout
 {
 	int options, old_options, bytes_read;
 	bool result = false;
 	char buffer[CONNECTIONRESPONSE];
+	memset(buffer, 0, CONNECTIONRESPONSE);
 	if ((old_options = fcntl(fd, F_GETFL)) == FAILURE)
 	{
 		cerr << "Failed to get new socket connection options" << endl;
@@ -104,10 +123,9 @@ bool Station::isConnectionAccepted(int fd) //non-blocking timeout
 	return result;
 }
 
-
-
 void Station::ioListen()
 {
+	SetMaxSocket();
 	if (select(initReadSet(readset, maxSock), &readset, NULL, NULL, NULL) == FAILURE) //read up to max socket for activity
 	{
 		cerr << "Select failed" << endl;
@@ -128,11 +146,10 @@ void Station::ioListen()
 			{
 				cerr << destination << ": host not found." << endl;
 			}
-			else if (pkt.type == ARP_REQUEST)
+			if (pkt.type != ARP_QUEUED)
 			{
-				pkt.data.msg = ""; //dont broadcast input
+				sendPacket(pkt, getConnection(pkt));
 			}
-			sendPacket(pkt, connected_ifaces[pkt.iface_out]);
 		}
 		else if (command == "show")
 		{
@@ -147,31 +164,147 @@ void Station::ioListen()
 				printARPCache();
 			}
 		}
+		else if (command == "connect")
+		{
+			connectbridges();
+		}
 		else
 		{
 			cerr << command << ": command not recognized" << endl;
 		}
 	
-	}
+	} 
+	
+	unordered_map<string, int> closed_ifaces;
 	for (auto it = connected_ifaces.begin(); it != connected_ifaces.end(); ++it)
 	{
 		if (FD_ISSET(it->second, &readset)) //server
 		{
-			int bytes_read;
-			if ((bytes_read = read(it->second, buffer, MSGMAX)) == 0)
+			char buffer[MSGMAX + 1];
+			memset(buffer, 0, MSGMAX + 1);
+			if (!readPreamble(it->second, buffer))
 			{
-				cerr << it->first << "Disconnected from server." << endl;
-				connected_ifaces.erase(it);
+				cerr << it->first << ": disconnected from server." << endl;
+				DBGOUT("REMOVING INTERFACE");
+				closed_ifaces[it->first] = it->second;
+				DBGOUT("INTERFACE REMOVED");
+				continue;
 			}
 			else
 			{
-				getMessageBuffer(it->second, bytes_read);
-				cout << msg << endl;
+				char* msg = receivePacket(it->second, buffer); //reads packet into msg  	
+				Ethernet_Pkt e(msg);
+				DBGOUT("PACKET RECEIVED: " << endl << e.serialize());
+				if (isRouter)
+				{
+					DBGOUT("ROUTER RECEIVED" << endl << e.serialize());
+					//build new check routing table ARP/gateway/packet etc;
+				}
+				else if (ownsPacket(e))
+				{
+					if (e.type == ARP_REQUEST)
+					{
+						Ethernet_Pkt response = buildReturnPkt(e);
+						DBGOUT("SENDING ARP RESPONSE: " << endl << response.serialize());
+						sendPacket(response, getConnection(response));
+					}
+					else if (e.type == ARP_RESPONSE)
+					{
+						DBGOUT("RECEIVING RESPONSE PACKET");
+						SendAwaitingARP(e);
+					}
+					else if (e.type == IPFRAME)
+					{
+						DBGOUT("RECEIVED MESSAGE: " << endl << e.serialize());
+						cout << "(" << ipv4_2_str(e.data.srcip)<< "):" <<  e.data.msg << endl;
+					}
+				}			
 				delete msg;
 			}
 		}
 	}
+
+	for (auto it = closed_ifaces.begin(); it != closed_ifaces.end(); ++it)
+	{
+		DBGOUT("REMOVING CLOSED CONNECTIONS: " << it->first);
+		close(it->second);
+		connected_ifaces.erase(it->first);
+	}
 	
+}
+
+void Station::SendAwaitingARP(const Ethernet_Pkt& e)
+{
+	arp_cache.push_back(ARP_Entry(e.data.srcip, e.src));
+	for (auto it = arp_queue.begin(); it != arp_queue.end(); ++it)
+	{	
+		if (ipv4_2_str(e.data.srcip) == ipv4_2_str(it->data.dstip))
+		{
+			DBGOUT(ipv4_2_str(e.data.srcip) << "?=" << ipv4_2_str(it->data.dstip));
+			DBGOUT("SENDING FROM AWAITING ARP QUEUE");
+			it->dst = e.src;
+			sendPacket(*it, getConnection(*it));
+			arp_queue.erase(it++);
+		}
+	}
+}
+
+int Station::getConnection(const Ethernet_Pkt& e) const
+{
+	for (auto it = connected_ifaces.begin(); it != connected_ifaces.end(); ++it)
+	{
+		if (it->first == e.iface_out)
+		{
+			return it->second;
+		}
+	}
+	return FAILURE;
+}
+
+Ethernet_Pkt Station::buildReturnPkt(const Ethernet_Pkt& e)
+{
+	string iface_out;
+	MacAddr host_mac;
+	IPAddr gatewayIP = 0, stationIP = 0;
+	for (auto it = routing_table.begin(); it != routing_table.end(); ++it)
+	{	
+		if (ipv4_2_str(e.data.srcip & it->mask) == ipv4_2_str(it->destsubnet))
+		{
+			gatewayIP = it->nexthop;
+			
+			iface_out = it->ifacename;
+			DBGOUT("GATEWAYIP: " << ipv4_2_str(gatewayIP) << " ON " << iface_out);
+			break;
+		}
+	}
+	for (auto it = iface_list.begin(); it != iface_list.end(); ++it)
+	{
+		if (iface_out == it->ifacename)
+		{
+			host_mac = it->macaddr;
+			stationIP = it->ipaddr;
+			DBGOUT("INTERFACE: " << host_mac);
+			break;
+		}
+	}
+	arp_cache.push_back(ARP_Entry(e.data.srcip, e.src));
+	IP_Pkt ipPkt(e.data.srcip, stationIP, gatewayIP, NOENTRY); //ipPkt(dst, src, gateway, msg);
+	return Ethernet_Pkt(e.src, host_mac, ARP_RESPONSE, ipPkt, iface_out);
+}
+
+bool Station::ownsPacket(const Ethernet_Pkt& e)
+{
+	for (auto it = iface_list.begin(); it != iface_list.end(); ++it)
+	{
+		DBGOUT(e.dst << "?=" << it->macaddr);
+		DBGOUT(ipv4_2_str(e.data.dstip) << "?=" << ipv4_2_str(it->ipaddr));
+		if (e.dst == it->macaddr || ipv4_2_str(e.data.dstip) == ipv4_2_str(it->ipaddr))
+		{
+			DBGOUT("PACKET BELONGS TO ME");
+			return true;
+		}
+	}
+	return false;
 }
 
 Ethernet_Pkt Station::buildMessagePkt(string dest, string msg)
@@ -189,7 +322,7 @@ Ethernet_Pkt Station::buildMessagePkt(string dest, string msg)
 			break;
 		}
 	}
-	if (host == NOENTRY) return Ethernet_Pkt(); // return 		
+	if (host == NOENTRY) return Ethernet_Pkt(); // return bad host	
 	for (auto it = routing_table.begin(); it != routing_table.end(); ++it)
 	{	
 		if (ipv4_2_str(destIP & it->mask) == ipv4_2_str(it->destsubnet))
@@ -210,9 +343,11 @@ Ethernet_Pkt Station::buildMessagePkt(string dest, string msg)
 			break;
 		}
 	}
+
 	for (auto it = arp_cache.begin(); it != arp_cache.end(); ++it)
 	{
-		if (gatewayIP == it->ipaddr)
+		DBGOUT("CHECKING IN ARP FOR IP: "<< ipv4_2_str(destIP) << " ?=" << ipv4_2_str(it->ipaddr));
+		if (ipv4_2_str(destIP) == ipv4_2_str(it->ipaddr))
 		{
 			peer_mac = it->macaddr;	
 			break;
@@ -221,9 +356,22 @@ Ethernet_Pkt Station::buildMessagePkt(string dest, string msg)
 	IP_Pkt ipPkt(destIP, stationIP, gatewayIP, msg);
 	if (peer_mac == NOENTRY) 
 	{
+		DBGOUT("PEER MAC NOT FOUND");
+		bool isSent = false;
+		for (auto it = arp_queue.begin(); it != arp_queue.end(); ++it)
+		{
+			if (gatewayIP == it->data.nexthop)
+			{
+				isSent = true;
+				break;
+			}
+		}
 		arp_queue.push_back(Ethernet_Pkt(NOENTRY, host_mac, IPFRAME, ipPkt, iface_out)); //push back awaiting arp response
+		ipPkt.msg = NOENTRY; 															 //dont broadcast input
+		if (isSent) return Ethernet_Pkt(NOENTRY, host_mac, ARP_QUEUED, ipPkt, iface_out); //if ARP is already pending just skip (dont duplicate ARP)
 		return Ethernet_Pkt(NOENTRY, host_mac, ARP_REQUEST, ipPkt, iface_out); 
 	}
+	DBGOUT("SENDING TO FOUND DESTINATION");
 	return Ethernet_Pkt(peer_mac, host_mac, IPFRAME, ipPkt, iface_out);
 }
 pair<string,string> Station::readLinks(string name) const
@@ -240,6 +388,14 @@ pair<string,string> Station::readLinks(string name) const
 	return make_pair(host, port);
 }
 
+size_t Station::getSequenceNumber()
+{
+	if (++sequenceNo > MAXSQNUM)
+	{
+		sequenceNo = 0;
+	}
+	return sequenceNo;
+}
 
 void Station::populateHosts(string hostfile)
 {
@@ -292,8 +448,18 @@ void Station::printARPCache() const
 	for (auto it = arp_cache.begin(); it != arp_cache.end(); ++it)
 	{
 		cout << setw(INET_MACSTRLEN) << left << it->macaddr;
-		cout << setw(INET_ADDRSTRLEN ) << left << ipv4_2_str(it->ipaddr) << endl;
+		cout << setw(INET_ADDRSTRLEN) << left << ipv4_2_str(it->ipaddr) << endl;
 	}
+	cout << dhr << "ARP MESSAGES\n" << dhr;
+	cout << setw(INET_ADDRSTRLEN ) << left << "DST IP ADDRESS" << setw(60) << left << "MESSAGE" << endl;
+	cout << hr;
+	for (auto it = arp_queue.begin(); it != arp_queue.end(); ++it)
+	{
+		cout << setw(INET_ADDRSTRLEN) << left << ipv4_2_str(it->data.srcip);
+		cout << setw(60) << left << it->data.msg << endl;
+	}
+	
+	
 }
 
 void Station::printTables() const
@@ -337,8 +503,10 @@ void Station::printTables() const
 
 Station::~Station()
 {
+	DBGOUT("CLOSING INTERFACES");
 	for (auto it = connected_ifaces.begin(); it != connected_ifaces.end(); ++it)
 	{
 		close(it->second);
 	}
+	DBGOUT("CLOSING INTERFACES COMPLETE");
 }

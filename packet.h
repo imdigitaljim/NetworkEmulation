@@ -17,11 +17,11 @@ Name: James Bach, Becky Powell
 
 using namespace std;
 
-
+typedef unsigned long PREAMBLE;
 typedef unsigned long IPAddr;
 typedef string MacAddr;
 
-enum FRAMETYPE {IPFRAME, ARP_REQUEST, ARP_RESPONSE , NOFRAME};
+enum FRAMETYPE {IPFRAME, ARP_REQUEST, ARP_RESPONSE , ARP_QUEUED, NOFRAME};
 
 class INET
 {
@@ -68,15 +68,22 @@ class Ethernet_Pkt : public INET //MAC LAYER
 {
 	public:	
 		Ethernet_Pkt() : dst(""), src(""), type(NOFRAME), data(IP_Pkt()), iface_out(""){}
-		Ethernet_Pkt(string s)
+		Ethernet_Pkt(string s) : data()
 		{
-			deserialize(s);
+			try
+			{
+				deserialize(s);	
+			}
+			catch (const exception& e)
+			{
+				*this = Ethernet_Pkt();
+			}
 		}
 		Ethernet_Pkt(MacAddr d, MacAddr s, FRAMETYPE t, IP_Pkt pkt, string ifc) 
-		: dst(d), src(s), type(t), data(pkt), iface_out(ifc)  {}
+		: dst(d), src(s), type(t), data(pkt), iface_out(ifc)  {} 
 		string serialize() const
 		{
-			return string("|MAC|" + to_string(static_cast<int>(type)) + "|" + dst + "|" + src  + data.serialize());
+			return string("|MAC|" + to_string(static_cast<int>(type)) + VB + dst + VB + src + data.serialize());
 		}
 		void deserialize(string pkt) 
 		{
