@@ -6,7 +6,6 @@ Name: James Bach, Becky Powell
 
 #include "bridge.h"
 
-
 Bridge::Bridge(string name, size_t ports) : current_ports(0) //TODO: start db cleanup thread
 {	
 	max_ports = ports;
@@ -73,8 +72,8 @@ void Bridge::GenerateInfoFiles()
 	aFile = file_prefix + "addr";
 	symlink(to_string(open_port).c_str(), pFile.c_str());
 	symlink(ipv4_2_str(localIp).c_str(), aFile.c_str());	
-	DBGOUT("CREATED FILE " << pFile << "POINTING TO " << to_string(open_port).c_str());
-	DBGOUT("CREATED FILE " << aFile << "POINTING TO " << ipv4_2_str(localIp).c_str());
+	DBGOUT("CREATED FILE " << pFile << " POINTING TO " << to_string(open_port).c_str());
+	DBGOUT("CREATED FILE " << aFile << " POINTING TO " << ipv4_2_str(localIp).c_str());
 }
 
 void Bridge::checkExitServer()
@@ -160,18 +159,9 @@ void Bridge::checkNewMessages()
 				//disconnect
 				current_ports--;
 				getpeername(*it, (sockaddr*)&client_addr, &calen);
-				string admin_msg = "admin: (" + to_string(ntohs(client_addr.sin_port)) + ")" + string(inet_ntoa(client_addr.sin_addr)) + " has disconnected. ";
-				cout << admin_msg  << endl;
+				DBGOUT("(" << to_string(ntohs(client_addr.sin_port)) << ")" << string(inet_ntoa(client_addr.sin_addr)) << " has disconnected.");
 				close(*it);
-				it = conn_list.erase(it);
-
-				/*
-				string send_msg = ultostr(admin_msg.length()) + admin_msg;
-				for (auto it2 = conn_list.begin(); it2 != conn_list.end(); it2++)
-				{
-					write(*it2, send_msg.c_str(), send_msg.length());	
-				}
-				*/
+				it = conn_list.erase(it--);
 				
 			}
 			else
@@ -180,29 +170,24 @@ void Bridge::checkNewMessages()
 				readMessage(*it, bytes_read);	
 				if (msgIsValid()) //not random empty data message?
 				{
-					string src_macaddress; //TODO: extract MAC_ADDRESS from message
-					connections[src_macaddress] = ConnectionEntry(*it); //adds AND refreshes entry					
-					string dest_macaddress; //TODO: extract MAC_ADDRESS from message
-					if (connections.count(dest_macaddress) > 0) // it knows the destination
+					Ethernet_Pkt e(msg);
+					//DBGOUT(e.serialize());
+			
+					connections[e.src] = ConnectionEntry(*it); //adds AND refreshes entry	
+					if (connections.count(e.dst) > 0) // it knows the destination
 					{
-						string response = ""; //TODO: send response / rebuild message
-						string send_msg = ultostr(response.length()) + response;
-						write(connections[dest_macaddress].port, send_msg.c_str(), send_msg.length());	
+						sendPacket(e, connections[e.dst].port);
 					}
 					else //broadcast message
 					{
-						string response = ""; //TODO: send response / rebuild message
-						string send_msg = ultostr(response.length()) + response;
 						for (auto it2 = conn_list.begin(); it2 != conn_list.end(); it2++)
 						{
 							if (*it != *it2)
 							{
-								write(*it2, send_msg.c_str(), send_msg.length());	
+								sendPacket(e, *it2);	
 							}
 						}
-					}
-					//string peer_msg = "(" + to_string(ntohs(client_addr.sin_port)) + ") " + string(inet_ntoa(client_addr.sin_addr)) + ": " + string(msg);
-					//cout << peer_msg << endl;	
+					}					
 				}
 				
 				delete msg;
@@ -221,7 +206,7 @@ void Bridge::readMessage(int sock, int bytes)
 	msg[len] = 0;
 }
 
-bool Bridge::msgIsValid()
+bool Bridge::msgIsValid() const
 {
 	return !(strcmp(msg, " ") == 0 || strcmp(msg, "\n") == 0 ||
 	   strcmp(msg, "\r") == 0 || strlen(msg) == 0);
@@ -248,9 +233,4 @@ Bridge::~Bridge()
 		close(*it);
 	}
 	close(main_socket);
-}
-
-ConnectionEntry::ConnectionEntry(int p) : TTL(TTLMAX)
-{
-	port = p;
 }

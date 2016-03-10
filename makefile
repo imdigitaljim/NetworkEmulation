@@ -23,7 +23,7 @@ stationdriver.o: stationdriver.cpp
 bridgedriver.o: bridgedriver.cpp
 	$(CC) $(CFLAGS) -c bridgedriver.cpp
 
-connection.o: connection.cpp connection.h
+connection.o: connection.cpp connection.h packet.h
 	$(CC) $(CFLAGS) -c connection.cpp
 
 bridge.o: bridge.h bridge.cpp connection.o

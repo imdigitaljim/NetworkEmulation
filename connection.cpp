@@ -13,21 +13,14 @@ string Connection::ultostr(unsigned long int x) const
 	ss << setfill('0') << setw(MSGMAX) << to_string(x);
 	return ss.str();
 }
-
-string Connection::ipv4_2_str(IPAddr x) const
+void Connection::sendPacket(const Ethernet_Pkt& e, int fd)
 {
-	char str[INET6_ADDRSTRLEN];	
-	memset(str, 0, INET6_ADDRSTRLEN);
-	inet_ntop(AF_INET, &x, str, INET6_ADDRSTRLEN);
-	return string(str);
+	string msg = e.serialize();
+	string send_msg = ultostr(msg.length()) + msg;
+	DBGOUT(send_msg);
+	write(fd, send_msg.c_str(), send_msg.length());
 }
 
-IPAddr Connection::str_2_ipv4(string x) const
-{
-	IPAddr result;
-	inet_pton(AF_INET, x.c_str(), &result);
-	return result;
-}
 
 int Connection::initReadSet(fd_set& rs, int ms, list<int> *cL)
 {

@@ -16,7 +16,7 @@ Name: James Bach, Becky Powell
 
 
 #include "connection.h"
-
+#include "tables.h"
 
 
 class Station : public Connection
@@ -31,8 +31,7 @@ class Station : public Connection
 		void printARPCache() const;
 
 	private:
-
-		string buildMessagePkt(string dest);
+		Ethernet_Pkt buildMessagePkt(string dest, string msg);
 		void populateHosts(string hostfile);
 		void populateRouting(string rtable);
 		void populateInterfaces(string iface);
@@ -41,14 +40,13 @@ class Station : public Connection
 		pair<string,string> readLinks(string name) const;
 		bool isConnectionAccepted(int fd);
 		int maxSock;
-		string server_ip;
 		
 		list<Host> host_list;
 		list<Route> routing_table;
 		list<Interface> iface_list;
-		list<Interface2Link> connected_ifaces;
+		unordered_map<string, int> connected_ifaces;
 		list<ARP_Entry> arp_cache;
-		list<ARPWait_Pkt> arp_queue;
+		list<Ethernet_Pkt> arp_queue;
 };
 
 
