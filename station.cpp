@@ -28,22 +28,14 @@ void Station::connectbridges()
 	{
 		pair<string, string> info = readLinks(it->lanname);
 		string host = info.first, port = info.second;
-		addrinfo hints = getHints(AI_CANONNAME | AI_PASSIVE), *serv_info, *p;	
-		if (getaddrinfo(host.c_str(), port.c_str(), &hints, &serv_info) == FAILURE) 
+		sockaddr_in sa = getSockAddrInfo(htons(atoi(port.c_str())));
+		if (inet_aton(host.c_str(), (in_addr *) &sa.sin_addr.s_addr))
 		{
-			cerr << "Failed to get address info" << endl;
-			exit(1);
-		}
-
-		// loop through all the results and connect to the first we can
-		for(p = serv_info; p != NULL; p = p->ai_next) 
-		{
-			if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == FAILURE) 
+			if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == FAILURE)
 			{
-				continue;
+				cerr << "Failed to create socket" << endl;
 			}
-
-			if (connect(fd, p->ai_addr, p->ai_addrlen) == FAILURE) 
+			if (connect(fd, (sockaddr *) &sa, sizeof(sa)) == FAILURE)
 			{
 				close(fd);
 				if (fails++ < MAXFAIL)
@@ -55,15 +47,13 @@ void Station::connectbridges()
 				else
 				{
 					cerr << "Connection to Interface Failed" << endl;
-					return;
 				}
 				continue;
 			}
-			break;
-		}
-		//freeaddrinfo(serv_info); // all done with this structure
-		if (!isConnectionAccepted(fd)) cerr << "Connection Rejected from Bridge" << endl;
-		connected_ifaces[it->ifacename] = fd;
+			if (!isConnectionAccepted(fd)) cerr << "Connection Rejected from Bridge" << endl;\
+			DBGOUT(it->ifacename << " connected to " << fd);
+			connected_ifaces[it->ifacename] = fd;
+		}		
 	}
 }
 

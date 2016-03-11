@@ -39,7 +39,7 @@ btstation: station
 	station -no ifaces/ifaces.b rtables/rtable.b hosts
 	
 atstation: station
-	station -no ifaces/ifaces.a rtables/rtable.a hosts
+	valgrind -v --leak-check=full station -no ifaces/ifaces.a rtables/rtable.a hosts
 
 ctstation: station
 	station -no ifaces/ifaces.c rtables/rtable.c hosts
@@ -49,7 +49,7 @@ etstation: station
 	station -no ifaces/ifaces.e rtables/rtable.e hosts
 	
 rtastation: station
-	station -route ifaces/ifaces.r2 rtables/rtable.r2 hosts
+	 station -route ifaces/ifaces.r2 rtables/rtable.r2 hosts
 rtbstation: station
 	station -route ifaces/ifaces.r1 rtables/rtable.r1 hosts
 rtcstation: station
