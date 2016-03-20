@@ -5,6 +5,7 @@ Name: James Bach, Becky Powell
 */
 
 #include "bridge.h"
+#include <thread>
 
 using namespace std;
 
@@ -28,13 +29,14 @@ int main(int argc, char** argv)
 		exit(1);
 	}
 	Bridge conn(name_str, port_count);
+
 	while(true)
 	{
 		/* listen to the socket.
 		* two cases:
 		* 1. connection open/close request from stations/routers
 		* 2. regular data packets */
-		conn.ioListen();
+		if (!conn.ioListen()) break;
 	}
 	return 0;
 }

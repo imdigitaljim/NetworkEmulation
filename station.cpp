@@ -96,7 +96,7 @@ bool Station::isConnectionAccepted(int fd) //non-blocking timeout
 	return result;
 }
 
-void Station::ioListen()
+bool Station::ioListen()
 {
 	if (select(initReadSet(readset, connected_ifaces), &readset, NULL, NULL, NULL) == FAILURE) //initi read up to max socket for activity
 	{
@@ -122,6 +122,10 @@ void Station::ioListen()
 			{
 				sendPacket(pkt, getConnection(pkt));
 			}
+		}
+		else if (command == "exit")
+		{
+			return false;
 		}
 		else if (command == "show")
 		{
@@ -157,7 +161,6 @@ void Station::ioListen()
 			if (!readPreamble(it->second, buffer))
 			{
 				cerr << it->first << ": disconnected from server." << endl;
-				DBGOUT("REMOVING INTERFACE");
 				closed_ifaces[it->first] = it->second;
 				for (auto it2 = iface_list.begin(); it2 != iface_list.end(); ++it2)
 				{
@@ -175,41 +178,39 @@ void Station::ioListen()
 						break;
 					}			
 				}
-				DBGOUT("INTERFACE REMOVED");
 				continue;
 			}
 			else
 			{
 				char* msg = receivePacket(it->second, buffer); //reads packet into msg  	
 				Ethernet_Pkt e(msg);
-				DBGOUT("PACKET RECEIVED: " << endl << e.serialize());
+				//DBGOUT("PACKET RECEIVED: " << endl << e.serialize());
 
 				if (ownsPacket(e) || (isRouter && (ipv4_2_str(e.data.nexthop) != LOCALIP)))
 				{
 					if (e.type == ARP_REQUEST)
 					{
 						Ethernet_Pkt response = buildReturnPkt(e);
-						DBGOUT("SENDING ARP RESPONSE: " << endl << response.serialize());
+						//DBGOUT("SENDING ARP RESPONSE: " << endl << response.serialize());
 						sendPacket(response, getConnection(response));
 					}
 					else if (e.type == ARP_RESPONSE)
 					{
-						DBGOUT("RECEIVING RESPONSE PACKET");
+						//DBGOUT("RECEIVING RESPONSE PACKET");
 						SendAwaitingARP(e);
 					}
 					else if (isRouter && e.type == IPFRAME)
 					{
-						DBGOUT("RECEIVED MESSAGE: " << endl << e.serialize());
+						//DBGOUT("RECEIVED MESSAGE: " << endl << e.serialize());
 						cout << "(" << ipv4_2_str(e.data.srcip)<< "):" <<  e.data.msg << endl;
-						DBGOUT("ROUTER RECEIVED" << endl << e.serialize());
+						//DBGOUT("ROUTER RECEIVED" << endl << e.serialize());
 						Ethernet_Pkt forward = buildRoutedPkt(e);
 						sendPacket(forward, getConnection(forward));
-						DBGOUT(e.data.msg << "| is the message received!");
 						printARPCache();
 					}
 					else if (e.type == IPFRAME)
 					{
-						DBGOUT("RECEIVED MESSAGE: " << endl << e.serialize());
+						//DBGOUT("RECEIVED MESSAGE: " << endl << e.serialize());
 						cout << "(" << ipv4_2_str(e.data.srcip)<< "):" <<  e.data.msg << endl;
 					}
 				}		
@@ -224,7 +225,7 @@ void Station::ioListen()
 		close(it->second);
 		connected_ifaces.erase(it->first);
 	}
-	
+	return true;
 }
 
 void Station::SendAwaitingARP(const Ethernet_Pkt& e)
@@ -234,8 +235,7 @@ void Station::SendAwaitingARP(const Ethernet_Pkt& e)
 	{	
 		if (e.dst == it->src)
 		{
-			DBGOUT(ipv4_2_str(e.data.srcip) << "?=" << ipv4_2_str(it->data.dstip));
-			DBGOUT("SENDING FROM AWAITING ARP QUEUE");
+			//DBGOUT("SENDING FROM AWAITING ARP QUEUE");
 			it->dst = e.src;
 			sendPacket(*it, getConnection(*it));
 			arp_queue.erase(it++);
@@ -265,7 +265,7 @@ Ethernet_Pkt Station::buildRoutedPkt(const Ethernet_Pkt& e)
 		{
 			gatewayIP = it->nexthop;
 			iface_out = it->ifacename;
-			DBGOUT("GATEWAYIP: " << ipv4_2_str(gatewayIP) << " ON " << iface_out);
+			//DBGOUT("GATEWAYIP: " << ipv4_2_str(gatewayIP) << " ON " << iface_out);
 			break;
 		}
 	}
@@ -275,14 +275,14 @@ Ethernet_Pkt Station::buildRoutedPkt(const Ethernet_Pkt& e)
 		{
 			host_mac = it->macaddr;
 			stationIP = it->ipaddr;
-			DBGOUT("INTERFACE: " << host_mac);
+			//DBGOUT("INTERFACE: " << host_mac);
 			break;
 		}
 	}
 
 	for (auto it = arp_cache.begin(); it != arp_cache.end(); ++it)
 	{
-		DBGOUT("CHECKING IN ARP FOR IP: "<< ipv4_2_str(e.data.dstip) << " ?=" << ipv4_2_str(it->ipaddr));
+		//DBGOUT("CHECKING IN ARP FOR IP: "<< ipv4_2_str(e.data.dstip) << " ?=" << ipv4_2_str(it->ipaddr));
 		if (ipv4_2_str(e.data.dstip) == ipv4_2_str(it->ipaddr))
 		{
 			peer_mac = it->macaddr;	
@@ -292,7 +292,6 @@ Ethernet_Pkt Station::buildRoutedPkt(const Ethernet_Pkt& e)
 	IP_Pkt ipPkt(e.data.dstip, e.data.srcip, gatewayIP, e.data.msg);
 	if (peer_mac == NOENTRY) 
 	{
-		DBGOUT("PEER MAC NOT FOUND");
 		bool isSent = false;
 		for (auto it = arp_queue.begin(); it != arp_queue.end(); ++it)
 		{
@@ -307,7 +306,6 @@ Ethernet_Pkt Station::buildRoutedPkt(const Ethernet_Pkt& e)
 		if (isSent) return Ethernet_Pkt(NOENTRY, host_mac, ARP_QUEUED, ipPkt, iface_out); //if ARP is already pending just skip (dont duplicate ARP)
 		return Ethernet_Pkt(NOENTRY, host_mac, ARP_REQUEST, IP_Pkt(e.data.dstip, stationIP, gatewayIP, NOENTRY), iface_out); 
 	}
-	DBGOUT("SENDING TO FOUND DESTINATION");
 	return Ethernet_Pkt(peer_mac, host_mac, IPFRAME, ipPkt, iface_out);
 }
 
@@ -324,7 +322,7 @@ Ethernet_Pkt Station::buildReturnPkt(const Ethernet_Pkt& e)
 			gatewayIP = it->nexthop;
 			
 			iface_out = it->ifacename;
-			DBGOUT("GATEWAYIP: " << ipv4_2_str(gatewayIP) << " ON " << iface_out);
+			//DBGOUT("GATEWAYIP: " << ipv4_2_str(gatewayIP) << " ON " << iface_out);
 			break;
 		}
 	}
@@ -334,7 +332,7 @@ Ethernet_Pkt Station::buildReturnPkt(const Ethernet_Pkt& e)
 		{
 			host_mac = it->macaddr;
 			stationIP = it->ipaddr;
-			DBGOUT("INTERFACE: " << host_mac);
+			//DBGOUT("INTERFACE: " << host_mac);
 			break;
 		}
 	}
@@ -365,11 +363,9 @@ bool Station::ownsPacket(const Ethernet_Pkt& e)
 {
 	for (auto it = iface_list.begin(); it != iface_list.end(); ++it)
 	{
-		DBGOUT(e.dst << "?=" << it->macaddr);
-		DBGOUT(ipv4_2_str(e.data.dstip) << "?=" << ipv4_2_str(it->ipaddr));
 		if (e.dst == it->macaddr || ipv4_2_str(e.data.dstip) == ipv4_2_str(it->ipaddr))
 		{
-			DBGOUT("PACKET BELONGS TO ME");
+			//DBGOUT("PACKET BELONGS TO ME");
 			return true;
 		}
 	}
@@ -387,7 +383,7 @@ Ethernet_Pkt Station::buildMessagePkt(string dest, string msg)
 		{
 			destIP = it->addr;
 			host = dest;
-			DBGOUT("HOST: " << host);
+			//DBGOUT("HOST: " << host);
 			break;
 		}
 	}
@@ -398,7 +394,7 @@ Ethernet_Pkt Station::buildMessagePkt(string dest, string msg)
 		{
 			gatewayIP = it->nexthop;
 			iface_out = it->ifacename;
-			DBGOUT("GATEWAYIP: " << ipv4_2_str(gatewayIP) << " ON " << iface_out);
+			//DBGOUT("GATEWAYIP: " << ipv4_2_str(gatewayIP) << " ON " << iface_out);
 			break;
 		}
 	}
@@ -408,14 +404,14 @@ Ethernet_Pkt Station::buildMessagePkt(string dest, string msg)
 		{
 			host_mac = it->macaddr;
 			stationIP = it->ipaddr;
-			DBGOUT("INTERFACE: " << host_mac);
+			//DBGOUT("INTERFACE: " << host_mac);
 			break;
 		}
 	}
 
 	for (auto it = arp_cache.begin(); it != arp_cache.end(); ++it)
 	{
-		DBGOUT("CHECKING IN ARP FOR IP: "<< ipv4_2_str(destIP) << " ?=" << ipv4_2_str(it->ipaddr));
+		//DBGOUT("CHECKING IN ARP FOR IP: "<< ipv4_2_str(destIP) << " ?=" << ipv4_2_str(it->ipaddr));
 		if (ipv4_2_str(destIP) == ipv4_2_str(it->ipaddr))
 		{
 			peer_mac = it->macaddr;	
@@ -425,7 +421,6 @@ Ethernet_Pkt Station::buildMessagePkt(string dest, string msg)
 	IP_Pkt ipPkt(destIP, stationIP, gatewayIP, msg);
 	if (peer_mac == NOENTRY) 
 	{
-		DBGOUT("PEER MAC NOT FOUND");
 		bool isSent = false;
 		for (auto it = arp_queue.begin(); it != arp_queue.end(); ++it)
 		{
@@ -440,7 +435,6 @@ Ethernet_Pkt Station::buildMessagePkt(string dest, string msg)
 		if (isSent) return Ethernet_Pkt(NOENTRY, host_mac, ARP_QUEUED, ipPkt, iface_out); //if ARP is already pending just skip (dont duplicate ARP)
 		return Ethernet_Pkt(NOENTRY, host_mac, ARP_REQUEST, ipPkt, iface_out); 
 	}
-	DBGOUT("SENDING TO FOUND DESTINATION");
 	return Ethernet_Pkt(peer_mac, host_mac, IPFRAME, ipPkt, iface_out);
 }
 pair<string,string> Station::readLinks(string name) const

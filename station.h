@@ -26,7 +26,7 @@ class Station : public Connection
 		Station(bool isRouter, string iface, string rtable, string hostfile);
 		~Station();
 		
-		void ioListen();
+		bool ioListen();
 		void printTables() const;
 		void printARPCache() const;
 

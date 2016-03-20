@@ -5,6 +5,7 @@ Name: James Bach, Becky Powell
 */
 
 #include "station.h"
+
 #define REQARGS 5
 
 using namespace std;
@@ -39,8 +40,7 @@ int main(int argc, char** argv)
 	* 2. from bridge: check if it is for the station. Note two types of data
 	* in the ethernet frame: ARP packet and IP packet.
 	* for a router, it may need to forward the IP packet*/
-		
-		conn.ioListen();
+		if (!conn.ioListen()) break;
 	}
 	return 0;
 }

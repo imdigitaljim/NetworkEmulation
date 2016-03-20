@@ -7,7 +7,7 @@
 
 
 CC=g++
-CFLAGS=-pedantic -Wall -std=c++11
+CFLAGS=-pedantic -Wall -pthread -std=c++11
 
 all: station bridge
 	

@@ -33,6 +33,8 @@ Name: James Bach, Becky Powell
 #include <utility>
 #include <iomanip>
 #include <unordered_map>
+#include <mutex>
+
 
 #include "packet.h"
 
@@ -64,7 +66,7 @@ class Connection : public INET
 		addrinfo getHints(int flags);
 		string ultostr(unsigned long int) const;
 		sockaddr_in getSockAddrInfo(int port);
-		virtual void ioListen() = 0;
+		virtual bool ioListen() = 0;
 		
 		
 		void sendPacket(const Ethernet_Pkt& e, int fd);

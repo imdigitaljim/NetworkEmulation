@@ -6,7 +6,8 @@ Name: James Bach, Becky Powell
 
 #include "bridge.h"
 
-Bridge::Bridge(string name, size_t ports) : current_ports(0) //TODO: start db cleanup thread
+
+Bridge::Bridge(string name, size_t ports) : current_ports(0), ttlthread(&Bridge::TTLTimer, this), isStopped(false)
 {	
 	max_ports = ports;
 	lan_name = name;
@@ -73,11 +74,11 @@ void Bridge::GenerateInfoFiles()
 	aFile = file_prefix + "addr";
 	symlink(to_string(open_port).c_str(), pFile.c_str());
 	symlink(ipv4_2_str(localIp).c_str(), aFile.c_str());	
-	DBGOUT("CREATED FILE " << pFile << " POINTING TO " << to_string(open_port).c_str());
-	DBGOUT("CREATED FILE " << aFile << " POINTING TO " << ipv4_2_str(localIp).c_str());
+	//DBGOUT("CREATED FILE " << pFile << " POINTING TO " << to_string(open_port).c_str());
+	//DBGOUT("CREATED FILE " << aFile << " POINTING TO " << ipv4_2_str(localIp).c_str());
 }
 
-void Bridge::checkExitServer()
+bool Bridge::checkExitServer()
 {
 	if (FD_ISSET(KEYBOARD, &readset)) //keyboard
 	{
@@ -85,9 +86,14 @@ void Bridge::checkExitServer()
 		getline(cin, input);
 		if (input == "exit")
 		{
-			exit(0);
+			return true;
+		}
+		if (input == "ttl")
+		{
+			printConnections();
 		}
 	}
+	return false;
 }
 
 void Bridge::checkNewConnections()
@@ -151,6 +157,7 @@ void Bridge::checkNewMessages()
 	unordered_map<string, int> closed_ifaces;
 	for (auto it = connected_ifaces.begin(); it != connected_ifaces.end(); ++it)
 	{
+		
 		if (FD_ISSET(it->second, &readset))
 		{	
 			sockaddr_in client_addr;
@@ -162,7 +169,7 @@ void Bridge::checkNewMessages()
 				//disconnect
 				current_ports--;
 				getpeername(it->second, (sockaddr*)&client_addr, &calen);
-				DBGOUT("(" << to_string(ntohs(client_addr.sin_port)) << ")" << string(inet_ntoa(client_addr.sin_addr)) << " has disconnected.");
+				cout << "(" << to_string(ntohs(client_addr.sin_port)) << ")" << string(inet_ntoa(client_addr.sin_addr)) << " has disconnected." << endl;
 				closed_ifaces[it->first] = it->second;
 				DBGOUT("PORTS AVAILABLE: " << max_ports - current_ports);
 				
@@ -172,25 +179,20 @@ void Bridge::checkNewMessages()
 				getpeername(it->second, (sockaddr*)&client_addr, &calen);
 				char* msg = receivePacket(it->second, buffer); //reads packet into msg  	
 				Ethernet_Pkt e(msg);
-				DBGOUT("FORWARDING PACKET" << e.serialize());
-#if DEBUG
-				if (e.type == ARP_REQUEST || e.type == ARP_RESPONSE)
-				{
-					DBGOUT("ARP PACKET!");
-				}
-#endif
+				//DBGOUT("FORWARDING PACKET" << e.serialize());
+				mtx.lock();
 				connections[e.src] = ConnectionEntry(it->second); //adds AND refreshes entry
 				printConnections();
-				DBGOUT("e.dst is " << e.dst);
-				DBGOUT("e.src is " << e.src);
+				//DBGOUT("e.dst is " << e.dst);
+				//DBGOUT("e.src is " << e.src);
 				if (e.dst != NOENTRY && connections.count(e.dst) > 0) // it knows the destination
 				{
-					DBGOUT("FOUND MAC - SENDING MSG TO:" << e.dst << " ON " << connections[e.dst].port);
+					//DBGOUT("FOUND MAC - SENDING MSG TO:" << e.dst << " ON " << connections[e.dst].port);
 					sendPacket(e, connections[e.dst].port);
 				}
 				else //broadcast message
 				{
-					DBGOUT("MAC NOT FOUND - BROADCASTING MSG");
+					//DBGOUT("MAC NOT FOUND - BROADCASTING MSG");
 					for (auto it2 = connected_ifaces.begin(); it2 != connected_ifaces.end(); it2++)
 					{
 						if (it->second != it2->second)
@@ -199,7 +201,8 @@ void Bridge::checkNewMessages()
 						}
 					}
 					DBGOUT("END OF BROADCASTING MSG");
-				}							
+				}
+				mtx.unlock();				
 				delete msg;
 			}
 		}
@@ -227,6 +230,7 @@ void Bridge::printConnections() const
 	cout << dhr << "MAC CACHE\n" << dhr;
 	cout << setw(INET_MACSTRLEN) << left << "MAC ADDRESS" << setw(7) << left << "FD" << setw(5) << "TTL" << endl;
 	cout << hr;
+
 	for (auto it = connections.begin(); it != connections.end(); ++it)
 	{
 		cout << setw(INET_MACSTRLEN) << left << it->first;
@@ -236,16 +240,43 @@ void Bridge::printConnections() const
 	cout << dhr;
 }
 
-void Bridge::ioListen()
+
+void Bridge::TTLTimer()
+{
+	bool isRunning = true;
+	while (isRunning)
+	{
+		this_thread::sleep_for(std::chrono::seconds(1));
+		mtx.lock();
+		unordered_map<MacAddr, ConnectionEntry> remove;
+		for (auto it = connections.begin(); it != connections.end(); ++it)
+		{
+			if (--(it->second.TTL) <= 0)
+			{
+				remove[it->first] = it->second;
+			}
+		}
+		for (auto it = remove.begin(); it != remove.end(); ++it)
+		{
+			connections.erase(it->first);
+		}
+		isRunning = !isStopped;
+		mtx.unlock();
+		
+	}
+}
+
+bool Bridge::ioListen()
 {
 	if (select(initReadSet(readset, connected_ifaces, main_socket), &readset, NULL, NULL, NULL) == FAILURE) //read up to max socket for activity
 	{
 		cerr << "Select failed" << endl;
 		exit(1);
 	}
-	checkExitServer();
+	if (checkExitServer()) return false;
 	checkNewConnections();
 	checkNewMessages();
+	return true;
 }
 
 Bridge::~Bridge()
@@ -256,4 +287,8 @@ Bridge::~Bridge()
 		close(it->second);
 	}
 	close(main_socket);
+	mtx.lock();
+	isStopped = true;
+	mtx.unlock();
+	ttlthread.join();	
 }

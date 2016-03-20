@@ -23,7 +23,7 @@ void Connection::sendPacket(const Ethernet_Pkt& e, int fd)
 	}
 	string msg = e.serialize();
 	string send_msg = ultostr(msg.length()) + msg;
-	DBGOUT("SENDING PACKET TO: " << fd << endl << send_msg);
+	//DBGOUT("SENDING PACKET TO: " << fd << endl << send_msg);
 	write(fd, send_msg.c_str(), send_msg.length());
 	
 }
@@ -42,19 +42,9 @@ char* Connection::receivePacket(int sock, char* buffer)
 	memset(msg, 0, len + 1);
 	read(sock, msg, len);
 	msg[len] = 0;
-	DBGOUT("***" << msg << "***");
+	//DBGOUT("***" << msg << "***");
 	return msg;
 }
-
-/*
-bool Connection::msgIsValid(char* msg) const 
-{
-	return !(strcmp(msg, " ") == 0 
-	|| strcmp(msg, "\n") == 0 
-	|| strcmp(msg, "\r") == 0 
-	|| strlen(msg) == 0);
-}
-*/
 
 int Connection::initReadSet(fd_set& read_set, const unordered_map<string,int>& connections, int mainSock)
 {

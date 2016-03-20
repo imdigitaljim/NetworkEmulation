@@ -9,14 +9,14 @@ Name: James Bach, Becky Powell
 
 #include "connection.h"
 
-#define TTLMAX 360
+#define TTLMAX 7200
 
 class ConnectionEntry
 {	
 	public:
 		ConnectionEntry(int p = 0) : port(p), TTL(TTLMAX) {}
 		int port;
-		double TTL; 
+		int TTL; 
 };
 
 class Bridge : public Connection
@@ -25,10 +25,11 @@ class Bridge : public Connection
 	public:	
 		Bridge(string name, size_t ports);
 		~Bridge(); 
-		void ioListen();
+		bool ioListen();
+		void TTLTimer();
 		void printConnections() const;
 	private:
-		void checkExitServer();
+		bool checkExitServer();
 		void checkNewConnections();
 		void checkNewMessages();
 
@@ -42,14 +43,13 @@ class Bridge : public Connection
 		string lan_name;
 		int main_socket;
 		
-
-		
 		/*fd connections to read through*/
-
-		list<int> conn_list;
 		size_t max_ports;
 		size_t current_ports;
 		
+		thread ttlthread;
+		bool isStopped;
+		mutex mtx;
 		/*self learning MAC address*/
 		unordered_map<MacAddr, ConnectionEntry> connections; 
 };
