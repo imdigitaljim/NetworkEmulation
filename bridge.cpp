@@ -129,8 +129,8 @@ void Bridge::checkNewConnections()
 		{
 			current_ports++;
 			DBGOUT("PORTS AVAILABLE: " << max_ports - current_ports);
-			conn_list.push_back(cd);
 			cout << "connect from '" + string(serv_info->ai_canonname) + "' at '" + to_string(ntohs(client_addr.sin_port)) + "'" << endl;	
+			connected_ifaces[to_string(ntohs(client_addr.sin_port))] = cd;
 			printConnections();
 			string response("accept");
 			write(cd, response.c_str(), response.length());	
@@ -148,29 +148,29 @@ void Bridge::checkNewConnections()
 
 void Bridge::checkNewMessages()
 {
-	for (auto it = conn_list.begin(); it != conn_list.end(); ++it)
+	unordered_map<string, int> closed_ifaces;
+	for (auto it = connected_ifaces.begin(); it != connected_ifaces.end(); ++it)
 	{
-		if (FD_ISSET(*it, &readset))
+		if (FD_ISSET(it->second, &readset))
 		{	
 			sockaddr_in client_addr;
 			socklen_t calen = sizeof(client_addr);
 			char buffer[MSGMAX + 1];
 			memset(buffer, 0, MSGMAX + 1);
-			if (!readPreamble(*it, buffer))
+			if (!readPreamble(it->second, buffer))
 			{
 				//disconnect
 				current_ports--;
-				getpeername(*it, (sockaddr*)&client_addr, &calen);
+				getpeername(it->second, (sockaddr*)&client_addr, &calen);
 				DBGOUT("(" << to_string(ntohs(client_addr.sin_port)) << ")" << string(inet_ntoa(client_addr.sin_addr)) << " has disconnected.");
-				close(*it);
-				it = conn_list.erase(it--);
+				closed_ifaces[it->first] = it->second;
 				DBGOUT("PORTS AVAILABLE: " << max_ports - current_ports);
 				
 			}
 			else
 			{
-				getpeername(*it, (sockaddr*)&client_addr, &calen);
-				char* msg = receivePacket(*it, buffer); //reads packet into msg  	
+				getpeername(it->second, (sockaddr*)&client_addr, &calen);
+				char* msg = receivePacket(it->second, buffer); //reads packet into msg  	
 				Ethernet_Pkt e(msg);
 				DBGOUT("FORWARDING PACKET" << e.serialize());
 #if DEBUG
@@ -179,7 +179,7 @@ void Bridge::checkNewMessages()
 					DBGOUT("ARP PACKET!");
 				}
 #endif
-				connections[e.src] = ConnectionEntry(*it); //adds AND refreshes entry
+				connections[e.src] = ConnectionEntry(it->second); //adds AND refreshes entry
 				printConnections();
 				DBGOUT("e.dst is " << e.dst);
 				DBGOUT("e.src is " << e.src);
@@ -191,11 +191,11 @@ void Bridge::checkNewMessages()
 				else //broadcast message
 				{
 					DBGOUT("MAC NOT FOUND - BROADCASTING MSG");
-					for (auto it2 = conn_list.begin(); it2 != conn_list.end(); it2++)
+					for (auto it2 = connected_ifaces.begin(); it2 != connected_ifaces.end(); it2++)
 					{
-						if (*it != *it2)
+						if (it->second != it2->second)
 						{
-							sendPacket(e, *it2);	
+							sendPacket(e, it2->second);	
 						}
 					}
 					DBGOUT("END OF BROADCASTING MSG");
@@ -203,6 +203,12 @@ void Bridge::checkNewMessages()
 				delete msg;
 			}
 		}
+	}
+	for (auto it = closed_ifaces.begin(); it != closed_ifaces.end(); ++it)
+	{
+		DBGOUT("REMOVING CLOSED CONNECTIONS: " << it->first);
+		close(it->second);
+		connected_ifaces.erase(it->first);
 	}
 }
 
@@ -213,9 +219,9 @@ void Bridge::printConnections() const
 	cout << dhr << "BROADCAST CONNECTION LIST\n" << dhr;
 	cout << setw(7) << left << "FD" << endl;
 	cout << hr;
-	for (auto it = conn_list.begin(); it != conn_list.end(); ++it)
+	for (auto it = connected_ifaces.begin(); it != connected_ifaces.end(); ++it)
 	{
-		cout << *it << endl;
+		cout << setw(7) << left << it->second << setw(20) << it->first << endl;
 	}
 	cout << dhr;
 	cout << dhr << "MAC CACHE\n" << dhr;
@@ -232,7 +238,7 @@ void Bridge::printConnections() const
 
 void Bridge::ioListen()
 {
-	if (select(initReadSet(readset, main_socket, &conn_list), &readset, NULL, NULL, NULL) == FAILURE) //read up to max socket for activity
+	if (select(initReadSet(readset, connected_ifaces, main_socket), &readset, NULL, NULL, NULL) == FAILURE) //read up to max socket for activity
 	{
 		cerr << "Select failed" << endl;
 		exit(1);
@@ -245,9 +251,9 @@ void Bridge::ioListen()
 Bridge::~Bridge()
 {
 	/* add file removal for cwd of .lan-name.addr/port*/
-	for (auto it = conn_list.begin(); it != conn_list.end(); it++)
+	for (auto it = connected_ifaces.begin(); it != connected_ifaces.end(); it++)
 	{
-		close(*it);
+		close(it->second);
 	}
 	close(main_socket);
 }

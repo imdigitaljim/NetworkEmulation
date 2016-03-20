@@ -45,6 +45,7 @@ class Bridge : public Connection
 
 		
 		/*fd connections to read through*/
+
 		list<int> conn_list;
 		size_t max_ports;
 		size_t current_ports;

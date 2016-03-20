@@ -38,7 +38,6 @@ char* Connection::receivePacket(int sock, char* buffer)
 {
 	buffer[MSGMAX] = 0;			
 	PREAMBLE len = strtoul(buffer, NULL, 10);
-	DBGOUT("RECEIVED MSG OF LENGTH " << len);
 	char* msg = new char[len + 1];
 	memset(msg, 0, len + 1);
 	read(sock, msg, len);
@@ -57,19 +56,16 @@ bool Connection::msgIsValid(char* msg) const
 }
 */
 
-int Connection::initReadSet(fd_set& rs, int ms, list<int> *cL)
+int Connection::initReadSet(fd_set& read_set, const unordered_map<string,int>& connections, int mainSock)
 {
-	int maxSocket = ms;
-	FD_ZERO(&rs);
-	FD_SET(ms, &rs);
-	FD_SET(KEYBOARD, &rs);
-	if (cL != nullptr)
+	int maxSocket = max(KEYBOARD, mainSock);
+	FD_ZERO(&read_set);
+	FD_SET(KEYBOARD, &read_set);
+	if (mainSock > KEYBOARD) FD_SET(mainSock, &read_set);
+	for (auto it = connections.begin(); it != connections.end(); it++)
 	{
-		for (auto it = cL->begin(); it != cL->end(); it++)
-		{
-			FD_SET(*it, &rs); //set fd_set
-			maxSocket = max(maxSocket, *it); //get a max to socket number
-		}
+		FD_SET(it->second, &read_set); //set fd_set
+		maxSocket = max(maxSocket, it->second); //get a max to socket number
 	}
 	return maxSocket + 1;
 }

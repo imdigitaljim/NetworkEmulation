@@ -20,6 +20,7 @@ Name: James Bach, Becky Powell
 #include <cstring>
 #include <string>
 #include <signal.h>
+#include <pthread.h>
 #include <unistd.h>
 #include <iomanip>
 #include <sstream>
@@ -59,7 +60,7 @@ class Connection : public INET
 {
 	protected:
 
-		int initReadSet(fd_set& rs, int ms, list<int> *cL = nullptr);
+		int initReadSet(fd_set& rs, const unordered_map<string,int>& connections, int mainSock = -1); // for bridge mainsock passed through
 		addrinfo getHints(int flags);
 		string ultostr(unsigned long int) const;
 		sockaddr_in getSockAddrInfo(int port);
@@ -69,7 +70,7 @@ class Connection : public INET
 		void sendPacket(const Ethernet_Pkt& e, int fd);
 		char* receivePacket(int sock, char* buffer);
 		bool readPreamble(int fd, char* buffer);
-
+		unordered_map<string, int> connected_ifaces; //interface name (or port) = fd
 		fd_set readset;
 				
 };

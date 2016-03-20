@@ -17,7 +17,7 @@ Name: James Bach, Becky Powell
 
 #include "connection.h"
 #include "tables.h"
-
+#define MAXTHREAD 5
 
 class Station : public Connection
 {
@@ -33,7 +33,11 @@ class Station : public Connection
 	private:
 		Ethernet_Pkt buildMessagePkt(string dest, string msg);
 		Ethernet_Pkt buildReturnPkt(const Ethernet_Pkt& e);
+		Ethernet_Pkt buildRoutedPkt(const Ethernet_Pkt& e);
+		
+		
 		void SendAwaitingARP(const Ethernet_Pkt& e);
+		void UpdateARPCache(const Ethernet_Pkt& e);
 		
 		void populateHosts(string hostfile);
 		void populateRouting(string rtable);
@@ -44,20 +48,19 @@ class Station : public Connection
 		bool isConnectionAccepted(int fd);
 		
 		bool ownsPacket(const Ethernet_Pkt& e);
-		int getConnection(const Ethernet_Pkt& e) const;
-		
-		void SetMaxSocket();		
-		int maxSock;
+		int getConnection(const Ethernet_Pkt& e) const;		
 		
 		const bool isRouter;
 		
 		size_t sequenceNo;
 		size_t getSequenceNumber();
 		
+		
+		pthread_t threads[MAXTHREAD];						
+		
 		list<Host> host_list;
 		list<Route> routing_table;
 		list<Interface> iface_list;
-		unordered_map<string, int> connected_ifaces;
 		list<ARP_Entry> arp_cache;
 		list<Ethernet_Pkt> arp_queue;
 };
