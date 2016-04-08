@@ -6,6 +6,8 @@ Name: James Bach, Becky Powell
 
 #include "bridge.h"
 #include <thread>
+#define REQARGS 3
+#define OPTIONARGS 4
 
 using namespace std;
 
@@ -15,7 +17,7 @@ bool isValidName(string name);
 /* bridge : recvs pkts and relays them*/
 int main(int argc, char** argv)
 {
-	if (argc != 3)
+	if (argc != REQARGS && argc != OPTIONARGS)
 	{
 		cerr << "usage: " << argv[0] << " <lan-name> <max-port>" << endl;
 		exit(1);
@@ -28,8 +30,16 @@ int main(int argc, char** argv)
 		cerr << name_str << ": already exists!" << endl;
 		exit(1);
 	}
-	Bridge conn(name_str, port_count);
-
+	bool debug = false;
+	if (argc == OPTIONARGS)
+	{
+		debug = (string(argv[3]) == "-d");
+	}
+	if (debug) cout << "DEBUG ON!" << endl;
+	cout << "Bridge" << endl;
+	cout << "--------" << endl << endl;
+	Bridge conn(debug, name_str, port_count);
+	cout << name_str << " > " << endl;
 	while(true)
 	{
 		/* listen to the socket.

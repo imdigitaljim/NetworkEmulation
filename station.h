@@ -23,7 +23,7 @@ class Station : public Connection
 {
 	
 	public:
-		Station(bool isRouter, string iface, string rtable, string hostfile);
+		Station(bool isRouter, bool isDebug, string iface, string rtable, string hostfile);
 		~Station();
 		
 		bool ioListen();
@@ -50,13 +50,8 @@ class Station : public Connection
 		bool ownsPacket(const Ethernet_Pkt& e);
 		int getConnection(const Ethernet_Pkt& e) const;		
 		
-		const bool isRouter;
-		
-		size_t sequenceNo;
-		size_t getSequenceNumber();
-		
-		
-		pthread_t threads[MAXTHREAD];						
+		const bool isRouter;					
+		bool DebugON;
 		
 		list<Host> host_list;
 		list<Route> routing_table;

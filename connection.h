@@ -49,7 +49,7 @@ Name: James Bach, Becky Powell
 #define INET_MACSTRLEN 18
 #define NOENTRY ""
 
-#define DEBUG true
+#define DEBUG false
 #if DEBUG
 #define DBGOUT(x) std::cout << "DEBUG:" << x << std::endl
 #else

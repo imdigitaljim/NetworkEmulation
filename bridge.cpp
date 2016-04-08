@@ -7,7 +7,7 @@ Name: James Bach, Becky Powell
 #include "bridge.h"
 
 
-Bridge::Bridge(string name, size_t ports) : current_ports(0), ttlthread(&Bridge::TTLTimer, this), isStopped(false)
+Bridge::Bridge(bool isDebug, string name, size_t ports) :current_ports(0), ttlthread(&Bridge::TTLTimer, this), DebugON(isDebug), isStopped(false)
 {	
 	max_ports = ports;
 	lan_name = name;
@@ -74,8 +74,6 @@ void Bridge::GenerateInfoFiles()
 	aFile = file_prefix + "addr";
 	symlink(to_string(open_port).c_str(), pFile.c_str());
 	symlink(ipv4_2_str(localIp).c_str(), aFile.c_str());	
-	//DBGOUT("CREATED FILE " << pFile << " POINTING TO " << to_string(open_port).c_str());
-	//DBGOUT("CREATED FILE " << aFile << " POINTING TO " << ipv4_2_str(localIp).c_str());
 }
 
 bool Bridge::checkExitServer()
@@ -84,6 +82,10 @@ bool Bridge::checkExitServer()
 	{
 		string input;
 		getline(cin, input);
+		if (input == "debug")
+		{
+			DebugON = !DebugON;
+		}
 		if (input == "exit")
 		{
 			return true;
@@ -134,10 +136,10 @@ void Bridge::checkNewConnections()
 		if (current_ports < max_ports)
 		{
 			current_ports++;
-			DBGOUT("PORTS AVAILABLE: " << max_ports - current_ports);
+			if (DebugON) cout <<"PORTS AVAILABLE: " << max_ports - current_ports << endl;
 			cout << "connect from '" + string(serv_info->ai_canonname) + "' at '" + to_string(ntohs(client_addr.sin_port)) + "'" << endl;	
 			connected_ifaces[to_string(ntohs(client_addr.sin_port))] = cd;
-			printConnections();
+			if (DebugON) printConnections();
 			string response("accept");
 			write(cd, response.c_str(), response.length());	
 		}
@@ -170,37 +172,31 @@ void Bridge::checkNewMessages()
 				current_ports--;
 				getpeername(it->second, (sockaddr*)&client_addr, &calen);
 				cout << "(" << to_string(ntohs(client_addr.sin_port)) << ")" << string(inet_ntoa(client_addr.sin_addr)) << " has disconnected." << endl;
+				if (DebugON) cout << "PORTS AVAILABLE: " << max_ports - current_ports << endl;
 				closed_ifaces[it->first] = it->second;
-				DBGOUT("PORTS AVAILABLE: " << max_ports - current_ports);
-				
 			}
 			else
 			{
 				getpeername(it->second, (sockaddr*)&client_addr, &calen);
 				char* msg = receivePacket(it->second, buffer); //reads packet into msg  	
 				Ethernet_Pkt e(msg);
-				//DBGOUT("FORWARDING PACKET" << e.serialize());
 				mtx.lock();
 				connections[e.src] = ConnectionEntry(it->second); //adds AND refreshes entry
-				printConnections();
-				//DBGOUT("e.dst is " << e.dst);
-				//DBGOUT("e.src is " << e.src);
 				if (e.dst != NOENTRY && connections.count(e.dst) > 0) // it knows the destination
 				{
-					//DBGOUT("FOUND MAC - SENDING MSG TO:" << e.dst << " ON " << connections[e.dst].port);
+					if (DebugON) cout << "SENDING DIRECT ON FD: " << it->second << ")" << endl;
 					sendPacket(e, connections[e.dst].port);
 				}
 				else //broadcast message
-				{
-					//DBGOUT("MAC NOT FOUND - BROADCASTING MSG");
+				{	
 					for (auto it2 = connected_ifaces.begin(); it2 != connected_ifaces.end(); it2++)
 					{
 						if (it->second != it2->second)
 						{
+							if (DebugON) cout << "BROADCASTING TO " << it2->second << "..." << endl;
 							sendPacket(e, it2->second);	
 						}
 					}
-					DBGOUT("END OF BROADCASTING MSG");
 				}
 				mtx.unlock();				
 				delete msg;
@@ -209,7 +205,6 @@ void Bridge::checkNewMessages()
 	}
 	for (auto it = closed_ifaces.begin(); it != closed_ifaces.end(); ++it)
 	{
-		DBGOUT("REMOVING CLOSED CONNECTIONS: " << it->first);
 		close(it->second);
 		connected_ifaces.erase(it->first);
 	}
@@ -219,14 +214,13 @@ void Bridge::printConnections() const
 {
 	string dhr("=======================================================\n");
 	string hr("--------------------------------------------------------\n");
-	cout << dhr << "BROADCAST CONNECTION LIST\n" << dhr;
-	cout << setw(7) << left << "FD" << endl;
+	cout << dhr << "CONNECTION LIST\n" << dhr;
+	cout << setw(7) << left << "FD" <<  setw(4) << left << "PORT" << endl;
 	cout << hr;
 	for (auto it = connected_ifaces.begin(); it != connected_ifaces.end(); ++it)
 	{
 		cout << setw(7) << left << it->second << setw(20) << it->first << endl;
 	}
-	cout << dhr;
 	cout << dhr << "MAC CACHE\n" << dhr;
 	cout << setw(INET_MACSTRLEN) << left << "MAC ADDRESS" << setw(7) << left << "FD" << setw(5) << "TTL" << endl;
 	cout << hr;
@@ -281,7 +275,6 @@ bool Bridge::ioListen()
 
 Bridge::~Bridge()
 {
-	/* add file removal for cwd of .lan-name.addr/port*/
 	for (auto it = connected_ifaces.begin(); it != connected_ifaces.end(); it++)
 	{
 		close(it->second);

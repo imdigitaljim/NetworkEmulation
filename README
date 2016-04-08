@@ -1,0 +1,37 @@
+#####################################################
+# CNT5505 - Data and Network Communications
+# James Bach, Becky Powell
+#####################################################
+1. Compiled on linprog, using makefile, type "make"
+
+2. Commands you can run in stations/bridges
+
+	Stations/Routers:
+	
+	send <destination> <message> // send message to a destination host ie "send B howdy"
+	show arp // show the ARP cache table information
+	show host // show the IP/name mapping table
+	connect // attempts to connect if the station has been disconnected
+	debug // toggles debug on or off
+	exit //exit the station
+
+	Bridges:
+	ttl // shows the MAC/ttl tables and connection list
+	debug // toggles debug on or off
+	exit //exit the bridge
+	
+3. To start the simulation using XTERM, type "run_simulation" (operates like the demo)
+
+   which emulates the following network topology
+
+   
+          B              C                D
+          |              |                |
+         cs1-----R1------cs2------R2-----cs3
+          |              |                |
+          -------A--------                E
+
+    cs1, cs2, and cs3 are bridges.
+    R1 and R2 are routers.
+    A to E are hosts/stations.
+    Note that A is multi-homed, but it is not a router.

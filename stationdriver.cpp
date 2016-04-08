@@ -7,6 +7,7 @@ Name: James Bach, Becky Powell
 #include "station.h"
 
 #define REQARGS 5
+#define OPTIONARGS 6
 
 using namespace std;
 
@@ -15,9 +16,9 @@ bool isValidFile(char* filename);
 
 int main(int argc, char** argv)
 {	
-	if (argc != REQARGS)
+	if (argc != REQARGS && argc != OPTIONARGS)
 	{
-		cerr << "usage: " << argv[0] << " <-no -route> <interface> <routingtable> <hostname>" << endl;
+		cerr << "usage: " << argv[0] << " <-no -route> <interface> <routingtable> <hostname><[optional:]-d>" << endl;
 		exit(1);
 	}
 	for (int i = 2; i < REQARGS; i++)
@@ -30,9 +31,16 @@ int main(int argc, char** argv)
 	}
 	string iface(argv[2]), rtable(argv[3]), hostfile(argv[4]);
 	/* initialization of hosts, interface, and routing tables */
-	Station conn(isRouter(argv[1]), iface, rtable, hostfile);	
+	bool debug = false;
+	if (argc == OPTIONARGS)
+	{
+		debug = (string(argv[5]) == "-d");
+		if (debug) cout << "DEBUG ON!" << endl;
+	}
+	Station conn(isRouter(argv[1]), debug, iface, rtable, hostfile);	
 	/* hook to the lans that the station should connected to
 	* note that a station may need to be connected to multilple lans */
+	cout << "station > " << endl;
 	while(true)
 	{
 	/* monitoring input from users and bridges

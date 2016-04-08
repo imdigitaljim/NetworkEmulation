@@ -23,7 +23,7 @@ class Bridge : public Connection
 {
 	
 	public:	
-		Bridge(string name, size_t ports);
+		Bridge(bool isDebug, string name, size_t ports);
 		~Bridge(); 
 		bool ioListen();
 		void TTLTimer();
@@ -48,6 +48,7 @@ class Bridge : public Connection
 		size_t current_ports;
 		
 		thread ttlthread;
+		bool DebugON;
 		bool isStopped;
 		mutex mtx;
 		/*self learning MAC address*/

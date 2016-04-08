@@ -23,7 +23,6 @@ void Connection::sendPacket(const Ethernet_Pkt& e, int fd)
 	}
 	string msg = e.serialize();
 	string send_msg = ultostr(msg.length()) + msg;
-	//DBGOUT("SENDING PACKET TO: " << fd << endl << send_msg);
 	write(fd, send_msg.c_str(), send_msg.length());
 	
 }
@@ -42,7 +41,6 @@ char* Connection::receivePacket(int sock, char* buffer)
 	memset(msg, 0, len + 1);
 	read(sock, msg, len);
 	msg[len] = 0;
-	//DBGOUT("***" << msg << "***");
 	return msg;
 }
 
