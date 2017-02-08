@@ -1,7 +1,4 @@
 #####################################################
-# CNT5505 - Data and Network Communications
-# James Bach, Becky Powell
-#####################################################
 1. Compiled on linprog, using makefile, type "make"
 
 2. Commands you can run in stations/bridges
